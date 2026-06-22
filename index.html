@@ -680,6 +680,39 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 .t-keybind-reset:hover{background:rgba(255,80,80,.12)}
 @keyframes t-pulse{0%,100%{opacity:1}50%{opacity:.6}}
 
+/* ── Secret page ── */
+.t-secret-unlock{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,200,80,.18);background:rgba(255,200,80,.04);color:rgba(255,210,80,.85);cursor:pointer;font-size:13px;font-weight:800;letter-spacing:.1em;transition:background 150ms,border-color 150ms}
+.t-secret-unlock:hover{background:rgba(255,200,80,.1);border-color:rgba(255,200,80,.35)}
+.t-pw-wrap{padding:6px 0 2px}
+.t-pw-row{display:flex;gap:6px;align-items:center}
+.t-pw-input{flex:1;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:#fff;font-size:13px;font-family:monospace;letter-spacing:.12em}
+.t-pw-input:focus{outline:none;border-color:rgba(125,211,252,.35)}
+.t-pw-submit{padding:8px 14px;border-radius:8px;border:1px solid rgba(125,211,252,.2);background:rgba(125,211,252,.08);color:#7dd3fc;cursor:pointer;font-size:13px;font-weight:700}
+.t-pw-submit:hover{background:rgba(125,211,252,.15)}
+.t-pw-err{font-size:11px;color:#f87171;min-height:16px;padding:2px 2px 0}
+@keyframes t-shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-7px)}40%{transform:translateX(7px)}60%{transform:translateX(-4px)}80%{transform:translateX(4px)}}
+.t-shake{animation:t-shake 320ms ease}
+/* ── Cycle editor ── */
+.t-cycle-row{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:9px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05)}
+.t-cycle-swatch{width:30px;height:30px;border-radius:7px;border:2px solid rgba(255,255,255,.15);cursor:pointer;flex-shrink:0;transition:transform 100ms}
+.t-cycle-swatch:hover{transform:scale(1.08)}
+.t-cycle-hex{font-size:11px;font-family:monospace;letter-spacing:.05em;opacity:.75;flex:1}
+.t-cycle-del{padding:5px 9px;border-radius:6px;border:1px solid rgba(255,80,80,.22);background:rgba(255,80,80,.07);color:rgba(255,140,140,.9);cursor:pointer;font-size:12px;font-weight:700}
+.t-cycle-del:hover{background:rgba(255,80,80,.16)}
+.t-cycle-add{width:100%;padding:10px;border-radius:10px;border:1px dashed rgba(125,211,252,.28);background:transparent;color:#7dd3fc;cursor:pointer;font-size:13px;font-weight:700}
+.t-cycle-add:hover{background:rgba(125,211,252,.07)}
+.t-cycle-preview-strip{display:flex;gap:4px;flex-wrap:wrap;padding:8px 10px;border-radius:10px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.05);min-height:40px;align-items:center}
+.t-cycle-dot{width:22px;height:22px;border-radius:5px;flex-shrink:0}
+.t-cycle-empty{font-size:11px;opacity:.35;font-style:italic}
+.t-cycle-toggle-row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px;border-radius:10px;background:rgba(255,200,80,.04);border:1px solid rgba(255,200,80,.12)}
+.t-cycle-toggle-label{font-size:12px;font-weight:700;color:rgba(255,210,80,.9)}
+.t-tog{position:relative;width:40px;height:22px;flex-shrink:0}
+.t-tog input{opacity:0;width:0;height:0;position:absolute}
+.t-tog-track{position:absolute;inset:0;border-radius:999px;background:rgba(255,255,255,.1);cursor:pointer;transition:background 180ms}
+.t-tog input:checked~.t-tog-track{background:#fbbf24}
+.t-tog-knob{position:absolute;left:3px;top:3px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform 180ms;pointer-events:none}
+.t-tog input:checked~.t-tog-track .t-tog-knob{transform:translateX(18px)}
+
 /* ── Color Customization rows ── */
 .t-color-custom-row{display:grid;grid-template-columns:90px 1fr auto;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04)}
 .t-color-custom-label{font-weight:700;font-size:11px;letter-spacing:.04em;opacity:.85}
@@ -763,6 +796,17 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       </div>
       <div class="t-settings-presets" id="t-settings-presets"></div>
       <div class="t-settings-list" id="t-settings-list"></div>
+      <!-- secret unlock at bottom -->
+      <div id="t-secret-gate">
+        <button type="button" class="t-secret-unlock" id="t-secret-unlock-btn">? ? ?</button>
+        <div id="t-secret-pw-wrap" class="t-pw-wrap" style="display:none;">
+          <div class="t-pw-row">
+            <input type="password" class="t-pw-input" id="t-secret-pw-input" placeholder="password…" maxlength="32" autocomplete="off" />
+            <button type="button" class="t-pw-submit" id="t-secret-pw-submit">→</button>
+          </div>
+          <div class="t-pw-err" id="t-secret-pw-err"></div>
+        </div>
+      </div>
     </div>
 
     <!-- TETROMINO PRESETS SUB-PAGE -->
@@ -772,6 +816,32 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         <button type="button" class="t-settings-save" id="t-settings-save">Save Current</button>
       </div>
       <div class="t-custom-presets" id="t-custom-presets"></div>
+    </div>
+
+    <!-- SECRET CYCLE PAGE -->
+    <div class="t-settings-page" id="t-settings-page-secret" style="display:none;">
+      <button type="button" class="t-settings-back-btn" id="t-secret-back">← Back</button>
+      <div class="t-page-title" style="color:rgba(255,210,80,.9);letter-spacing:.04em;">✦ Custom Color Cycle</div>
+
+      <!-- Enable toggle -->
+      <div class="t-cycle-toggle-row">
+        <span class="t-cycle-toggle-label">Enable Custom Cycle</span>
+        <label class="t-tog">
+          <input type="checkbox" id="t-cycle-toggle" />
+          <div class="t-tog-track"><div class="t-tog-knob"></div></div>
+        </label>
+      </div>
+
+      <!-- Live preview strip -->
+      <div class="t-cycle-preview-strip" id="t-cycle-preview">
+        <span class="t-cycle-empty">Add colors below — they'll cycle on your tetrominos</span>
+      </div>
+
+      <!-- Color rows (built by JS) -->
+      <div class="t-settings-list" id="t-cycle-list" style="gap:6px;overflow-y:auto;"></div>
+
+      <!-- Add color -->
+      <button type="button" class="t-cycle-add" id="t-cycle-add">＋ Add Color</button>
     </div>
 
     <!-- COLOR CUSTOMIZATION PAGE -->
@@ -1628,7 +1698,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
   function showView(which){
     view = which;
-    const PAGES = ['home','keybinds','colors','presets','color-custom','fun-custom'];
+    const PAGES = ['home','keybinds','colors','presets','color-custom','fun-custom','secret'];
     PAGES.forEach(p => {
       const el = $(`t-settings-page-${p}`);
       if (el) el.style.display = 'none';
@@ -1636,7 +1706,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const target = $(`t-settings-page-${which}`);
     if (target) target.style.display = 'flex';
 
-    const subtitles = { home:'Customization', keybinds:'Settings', colors:'Tetromino Colors', presets:'Presets', 'color-custom':'Color Customization', 'fun-custom':'Fun Customization' };
+    const subtitles = { home:'Customization', keybinds:'Settings', colors:'Tetromino Colors', presets:'Presets', 'color-custom':'Color Customization', 'fun-custom':'Fun Customization', secret:'✦ Custom Cycle' };
     if (subtitleEl) subtitleEl.textContent = subtitles[which] || '';
 
     if (which === 'colors') { renderRows(); renderBuiltinPresets(); }
@@ -1644,6 +1714,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     else if (which === 'keybinds') renderKeybinds();
     else if (which === 'color-custom') renderColorCustom();
     else if (which === 'fun-custom') renderFunCustom();
+    else if (which === 'secret') renderSecretPage();
   }
 
   function updatePresetButtons(){
@@ -2240,6 +2311,189 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
   }
 
   // ──────────────────────────────────────────
+  // ── SECRET CUSTOM COLOR CYCLE ─────────────
+  // ──────────────────────────────────────────
+  const SECRET_PW = 'kitkat';
+  const CUSTOM_CYCLE_LS = 'tetris_custom_cycle_v1';
+
+  function getCustomCycle() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(CUSTOM_CYCLE_LS) || 'null');
+      if (raw && Array.isArray(raw.colors)) {
+        return {
+          colors: raw.colors.filter(c => typeof c === 'string' && /^#/.test(c)),
+          enabled: !!raw.enabled
+        };
+      }
+    } catch (e) {}
+    return { colors: [], enabled: false };
+  }
+
+  function persistCustomCycle(colors, enabled) {
+    const data = { colors, enabled };
+    try { localStorage.setItem(CUSTOM_CYCLE_LS, JSON.stringify(data)); } catch (e) {}
+    if (typeof window.__setCustomCycle === 'function') window.__setCustomCycle(colors, enabled);
+  }
+
+  function renderCyclePreview() {
+    const strip = $('t-cycle-preview');
+    if (!strip) return;
+    const { colors } = getCustomCycle();
+    strip.innerHTML = '';
+    if (!colors.length) {
+      const msg = document.createElement('span');
+      msg.className = 't-cycle-empty';
+      msg.textContent = 'Add colors below — they\'ll cycle on your tetrominos';
+      strip.appendChild(msg);
+      return;
+    }
+    colors.forEach(c => {
+      const dot = document.createElement('div');
+      dot.className = 't-cycle-dot';
+      dot.style.background = c;
+      dot.title = c.toUpperCase();
+      strip.appendChild(dot);
+    });
+  }
+
+  function renderCycleList() {
+    const listEl = $('t-cycle-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    const { colors, enabled } = getCustomCycle();
+
+    // sync toggle state
+    const tog = $('t-cycle-toggle');
+    if (tog) tog.checked = enabled;
+
+    colors.forEach((color, idx) => {
+      const row = document.createElement('div');
+      row.className = 't-cycle-row';
+
+      // invisible native color input (triggered by swatch click)
+      const picker = document.createElement('input');
+      picker.type = 'color';
+      picker.value = color;
+      picker.style.cssText = 'position:absolute;width:0;height:0;opacity:0;pointer-events:none;';
+
+      const swatch = document.createElement('div');
+      swatch.className = 't-cycle-swatch';
+      swatch.style.background = color;
+      swatch.title = 'Click to change';
+
+      swatch.addEventListener('click', e => { e.stopPropagation(); picker.click(); });
+
+      const hexSpan = document.createElement('span');
+      hexSpan.className = 't-cycle-hex';
+      hexSpan.textContent = color.toUpperCase();
+
+      picker.addEventListener('pointerdown', e => e.stopPropagation());
+      picker.addEventListener('input', () => {
+        const { colors: cols, enabled: en } = getCustomCycle();
+        cols[idx] = picker.value;
+        swatch.style.background = picker.value;
+        hexSpan.textContent = picker.value.toUpperCase();
+        persistCustomCycle(cols, en);
+        renderCyclePreview();
+      });
+
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 't-cycle-del';
+      delBtn.textContent = '✕';
+      delBtn.title = 'Remove';
+      delBtn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const { colors: cols, enabled: en } = getCustomCycle();
+        cols.splice(idx, 1);
+        persistCustomCycle(cols, en);
+        renderCycleList();
+        renderCyclePreview();
+      });
+
+      row.appendChild(picker);
+      row.appendChild(swatch);
+      row.appendChild(hexSpan);
+      row.appendChild(delBtn);
+      listEl.appendChild(row);
+    });
+
+    renderCyclePreview();
+  }
+
+  function renderSecretPage() {
+    renderCycleList();
+  }
+
+  function initSecretPage() {
+    // password gate
+    const unlockBtn = $('t-secret-unlock-btn');
+    const pwWrap    = $('t-secret-pw-wrap');
+    const pwInput   = $('t-secret-pw-input');
+    const pwSubmit  = $('t-secret-pw-submit');
+    const pwErr     = $('t-secret-pw-err');
+
+    if (unlockBtn) {
+      unlockBtn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const visible = pwWrap.style.display !== 'none';
+        pwWrap.style.display = visible ? 'none' : 'block';
+        if (!visible) { pwInput.value = ''; pwErr.textContent = ''; setTimeout(() => pwInput.focus(), 50); }
+      });
+    }
+
+    function tryUnlock() {
+      if ((pwInput.value || '').trim().toLowerCase() === SECRET_PW) {
+        pwWrap.style.display = 'none';
+        pwInput.value = ''; pwErr.textContent = '';
+        showView('secret');
+      } else {
+        pwErr.textContent = 'Wrong password. Try again.';
+        pwInput.classList.remove('t-shake');
+        void pwInput.offsetWidth; // restart animation
+        pwInput.classList.add('t-shake');
+        pwInput.value = '';
+        setTimeout(() => pwInput.classList.remove('t-shake'), 360);
+      }
+    }
+
+    if (pwSubmit) pwSubmit.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); tryUnlock(); });
+    if (pwInput) {
+      pwInput.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') tryUnlock(); });
+      pwInput.addEventListener('pointerdown', e => e.stopPropagation());
+      pwInput.addEventListener('click', e => e.stopPropagation());
+    }
+
+    // back button
+    const secBack = $('t-secret-back');
+    if (secBack) secBack.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); showView('colors'); });
+
+    // enable toggle
+    const tog = $('t-cycle-toggle');
+    if (tog) {
+      tog.addEventListener('change', () => {
+        const { colors } = getCustomCycle();
+        persistCustomCycle(colors, tog.checked);
+      });
+    }
+
+    // add color button
+    const addBtn = $('t-cycle-add');
+    if (addBtn) {
+      addBtn.addEventListener('click', e => {
+        e.preventDefault(); e.stopPropagation();
+        const { colors, enabled } = getCustomCycle();
+        // pick a pleasant default next color
+        const defaults = ['#ff0000','#ffffff','#0000ff','#ffff00','#00ff88','#ff00ff','#ff8800'];
+        const next = defaults[colors.length % defaults.length] || '#ffffff';
+        colors.push(next);
+        persistCustomCycle(colors, enabled);
+        renderCycleList();
+      });
+    }
+  }
+
+  // ──────────────────────────────────────────
   // ── BUTTON WIRING ─────────────────────────
   // ──────────────────────────────────────────
 
@@ -2325,6 +2579,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
   // ── Init ──
   initColorCustom();
   initFunCustom();
+  initSecretPage();
   saveOpts(getOpts()); // apply saved opts to window.__tetrisOpts
   updateHintBar(getKeybinds()); // init hint bar
   renderBuiltinPresets();
