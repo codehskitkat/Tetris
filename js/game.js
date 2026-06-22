@@ -261,9 +261,12 @@ const TETROMINOS_90_DEGREE = {
   const RGB_TETROMINO_COLORS = ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8000ff', '#ff1493'];
   const RGB_TETROMINO_SPEED_STORAGE_KEY = 'tetris_rgb_cycle_ms';
   const RGB_AFTER_PLACE_STORAGE_KEY = 'tetris_rgb_after_place_cycle';
+  const CUSTOM_CYCLE_STORAGE_KEY = 'tetris_custom_cycle_v1';
   let rgbCycleMs = 140;
   let rgbMode = false;
   let rgbCycleAfterPlace = false;
+  let customCycleColors = [];
+  let customCycleEnabled = false;
 
   function clampRgbSpeed(ms) {
     const n = Number(ms);
@@ -314,7 +317,10 @@ const TETROMINOS_90_DEGREE = {
     const idx = TETROMINO_TYPES.indexOf(type);
     if (idx < 0) return 'gray';
     const step = Math.floor(Date.now() / rgbCycleMs);
-    return RGB_TETROMINO_COLORS[(step + idx) % RGB_TETROMINO_COLORS.length];
+    const palette = (customCycleEnabled && customCycleColors.length > 0)
+      ? customCycleColors
+      : RGB_TETROMINO_COLORS;
+    return palette[(step + idx) % palette.length];
   }
 
 
@@ -374,6 +380,14 @@ const TETROMINOS_90_DEGREE = {
   } catch (e) {
     setRgbCycleAfterPlace(false);
   }
+  try {
+    const savedCycle = JSON.parse(localStorage.getItem(CUSTOM_CYCLE_STORAGE_KEY) || 'null');
+    if (savedCycle && Array.isArray(savedCycle.colors) && savedCycle.colors.length > 0) {
+      customCycleColors = savedCycle.colors.filter(c => typeof c === 'string' && c.startsWith('#'));
+      customCycleEnabled = !!savedCycle.enabled;
+      if (customCycleEnabled) setTetrominoMode('rgb');
+    }
+  } catch (e) {}
 
   window.__tetrominoPieceTypes = TETROMINO_TYPES.slice();
   window.__tetrominoDefaultColors = DEFAULT_TETROMINO_COLORS.slice();
@@ -406,6 +420,16 @@ const TETROMINOS_90_DEGREE = {
   };
   window.__getTetrominoRgbAfterPlace = function() {
     return rgbCycleAfterPlace;
+  };
+  window.__setCustomCycle = function(colors, enabled) {
+    customCycleColors = Array.isArray(colors) ? colors.filter(c => typeof c === 'string' && c.startsWith('#')) : customCycleColors;
+    customCycleEnabled = !!enabled;
+    if (customCycleEnabled) setTetrominoMode('rgb');
+    try { localStorage.setItem(CUSTOM_CYCLE_STORAGE_KEY, JSON.stringify({ colors: customCycleColors, enabled: customCycleEnabled })); } catch (e) {}
+    applyTetrominoColorsToPieces();
+  };
+  window.__getCustomCycle = function() {
+    return { colors: customCycleColors.slice(), enabled: customCycleEnabled };
   };
   window.__tetrominoPresets = {
     default: DEFAULT_TETROMINO_COLORS.slice(),
