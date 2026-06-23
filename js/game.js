@@ -257,16 +257,16 @@ const TETROMINOS_90_DEGREE = {
   const TETROMINO_TYPES = Object.keys(TETROMINOS_90_DEGREE);
   const DEFAULT_TETROMINO_COLORS = COLORS.slice();
   const TETROMINO_COLOR_STORAGE_KEY = 'tetris_tetromino_colors';
-  const TETROMINO_MODE_STORAGE_KEY = 'tetris_tetromino_mode';
+  const CYCLE_MODE_STORAGE_KEY = 'tetris_tetromino_mode';
   const RGB_TETROMINO_COLORS = ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8000ff', '#ff1493'];
+  const CUSTOM_CYCLE_DEFAULT_COLORS = ['#ff0000', '#ffffff', '#0000ff'];
   const RGB_TETROMINO_SPEED_STORAGE_KEY = 'tetris_rgb_cycle_ms';
   const RGB_AFTER_PLACE_STORAGE_KEY = 'tetris_rgb_after_place_cycle';
-  const CUSTOM_CYCLE_STORAGE_KEY = 'tetris_custom_cycle_v1';
+  const CYCLE_COLORS_STORAGE_KEY = 'tetris_custom_cycle_colors_v1';
   let rgbCycleMs = 140;
+  let cycleMode = 'static';
   let rgbMode = false;
   let rgbCycleAfterPlace = false;
-  let customCycleColors = [];
-  let customCycleEnabled = false;
 
   function clampRgbSpeed(ms) {
     const n = Number(ms);
@@ -282,9 +282,10 @@ const TETROMINOS_90_DEGREE = {
   }
 
   function setTetrominoMode(mode) {
-    rgbMode = (mode === 'rgb');
-    window.__tetrominoMode = rgbMode ? 'rgb' : 'static';
-    try { localStorage.setItem(TETROMINO_MODE_STORAGE_KEY, window.__tetrominoMode); } catch (e) {}
+    cycleMode = (mode === 'rgb' || mode === 'custom') ? mode : 'static';
+    rgbMode = cycleMode === 'rgb';
+    window.__tetrominoMode = cycleMode;
+    try { localStorage.setItem(CYCLE_MODE_STORAGE_KEY, window.__tetrominoMode); } catch (e) {}
   }
 
   function setRgbCycleAfterPlace(enabled) {
@@ -298,6 +299,10 @@ const TETROMINOS_90_DEGREE = {
     return gameActive && (!paused || rgbCycleAfterPlace);
   }
 
+  function isCycleActive() {
+    return cycleMode === 'rgb' || cycleMode === 'custom';
+  }
+
   function isRgbCell(cell) {
     return !!(cell && typeof cell === 'object' && cell.__rgbCell);
   }
@@ -305,7 +310,7 @@ const TETROMINOS_90_DEGREE = {
   function getGridCellColor(cell) {
     if (!cell) return cell;
     if (isRgbCell(cell)) {
-      return getRgbColorForType(cell.type);
+      return getCycleColorForType(cell.type);
     }
     if (typeof cell === 'object') {
       return typeof cell.color === 'string' ? cell.color : (cell.baseColor || 'gray');
@@ -313,13 +318,26 @@ const TETROMINOS_90_DEGREE = {
     return cell;
   }
 
-  function getRgbColorForType(type) {
+  function getStoredCycleColors() {
+    try {
+      const raw = JSON.parse(localStorage.getItem(CYCLE_COLORS_STORAGE_KEY) || 'null');
+      if (Array.isArray(raw) && raw.length) return raw.map(v => String(v || '').trim()).filter(Boolean);
+    } catch (e) {}
+    return CUSTOM_CYCLE_DEFAULT_COLORS.slice();
+  }
+
+  function getCycleColorsForMode() {
+    if (cycleMode === 'custom') {
+      return getStoredCycleColors();
+    }
+    return RGB_TETROMINO_COLORS.slice();
+  }
+
+  function getCycleColorForType(type) {
     const idx = TETROMINO_TYPES.indexOf(type);
     if (idx < 0) return 'gray';
+    const palette = getCycleColorsForMode();
     const step = Math.floor(Date.now() / rgbCycleMs);
-    const palette = (customCycleEnabled && customCycleColors.length > 0)
-      ? customCycleColors
-      : RGB_TETROMINO_COLORS;
     return palette[(step + idx) % palette.length];
   }
 
@@ -334,7 +352,7 @@ const TETROMINOS_90_DEGREE = {
   }
 
   function getTetrominoColorForType(type) {
-    if (rgbMode) return getRgbColorForType(type);
+    if (isCycleActive()) return getCycleColorForType(type);
     const idx = TETROMINO_TYPES.indexOf(type);
     return COLORS[idx] ?? 'gray';
   }
@@ -363,8 +381,9 @@ const TETROMINOS_90_DEGREE = {
     if (savedTetrominoColors) COLORS = normalizeTetrominoColors(savedTetrominoColors);
   } catch (e) {}
   try {
-    const savedMode = localStorage.getItem(TETROMINO_MODE_STORAGE_KEY);
-    setTetrominoMode(savedMode === 'rgb' ? 'rgb' : 'static');
+    const savedMode = localStorage.getItem(CYCLE_MODE_STORAGE_KEY);
+    if (savedMode === 'rgb' || savedMode === 'custom') setTetrominoMode(savedMode);
+    else setTetrominoMode('static');
   } catch (e) {
     setTetrominoMode('static');
   }
@@ -380,21 +399,14 @@ const TETROMINOS_90_DEGREE = {
   } catch (e) {
     setRgbCycleAfterPlace(false);
   }
-  try {
-    const savedCycle = JSON.parse(localStorage.getItem(CUSTOM_CYCLE_STORAGE_KEY) || 'null');
-    if (savedCycle && Array.isArray(savedCycle.colors) && savedCycle.colors.length > 0) {
-      customCycleColors = savedCycle.colors.filter(c => typeof c === 'string' && c.startsWith('#'));
-      customCycleEnabled = !!savedCycle.enabled;
-      if (customCycleEnabled) setTetrominoMode('rgb');
-    }
-  } catch (e) {}
 
   window.__tetrominoPieceTypes = TETROMINO_TYPES.slice();
   window.__tetrominoDefaultColors = DEFAULT_TETROMINO_COLORS.slice();
   window.__tetrominoRgbColors = RGB_TETROMINO_COLORS.slice();
   window.__tetrominoRgbSpeed = rgbCycleMs;
-  window.__tetrominoMode = rgbMode ? 'rgb' : 'static';
+  window.__tetrominoMode = cycleMode;
   window.__tetrominoColors = COLORS.slice();
+  window.__tetrominoCycleColors = getStoredCycleColors().slice();
   window.__getTetrominoColors = function() {
     return COLORS.slice();
   };
@@ -402,12 +414,36 @@ const TETROMINOS_90_DEGREE = {
     COLORS = normalizeTetrominoColors(nextColors);
     window.__tetrominoColors = COLORS.slice();
     try { localStorage.setItem(TETROMINO_COLOR_STORAGE_KEY, JSON.stringify(COLORS)); } catch (e) {}
-    if (typeof options.rgbMode === 'boolean') {
+    if (typeof options.mode === 'string') {
+      setTetrominoMode(options.mode);
+    } else if (typeof options.rgbMode === 'boolean') {
       setTetrominoMode(options.rgbMode ? 'rgb' : 'static');
     }
-    try { localStorage.setItem(TETROMINO_MODE_STORAGE_KEY, window.__tetrominoMode || 'static'); } catch (e) {}
+    try { localStorage.setItem(CYCLE_MODE_STORAGE_KEY, window.__tetrominoMode || 'static'); } catch (e) {}
     if (!options.silent) applyTetrominoColorsToPieces();
     return COLORS.slice();
+  };
+  window.__setTetrominoCycleMode = function(mode) {
+    setTetrominoMode(mode);
+    try { localStorage.setItem(CYCLE_MODE_STORAGE_KEY, window.__tetrominoMode || 'static'); } catch (e) {}
+    applyTetrominoColorsToPieces();
+    return window.__tetrominoMode;
+  };
+  window.__getTetrominoCycleMode = function() {
+    return cycleMode;
+  };
+  window.__setTetrominoCycleColors = function(nextColors) {
+    const safe = Array.isArray(nextColors) && nextColors.length
+      ? nextColors.map(v => String(v || '').trim()).filter(Boolean)
+      : CUSTOM_CYCLE_DEFAULT_COLORS.slice();
+    window.__tetrominoCycleColors = safe.slice();
+    if (window.__tetrominoPresets) window.__tetrominoPresets['custom-cycle'] = safe.slice();
+    try { localStorage.setItem(CYCLE_COLORS_STORAGE_KEY, JSON.stringify(safe)); } catch (e) {}
+    applyTetrominoColorsToPieces();
+    return safe.slice();
+  };
+  window.__getTetrominoCycleColors = function() {
+    return getStoredCycleColors().slice();
   };
   window.__setTetrominoRgbSpeed = function(ms) {
     return setRgbCycleMs(ms);
@@ -421,21 +457,11 @@ const TETROMINOS_90_DEGREE = {
   window.__getTetrominoRgbAfterPlace = function() {
     return rgbCycleAfterPlace;
   };
-  window.__setCustomCycle = function(colors, enabled) {
-    customCycleColors = Array.isArray(colors) ? colors.filter(c => typeof c === 'string' && c.startsWith('#')) : customCycleColors;
-    customCycleEnabled = !!enabled;
-    if (customCycleEnabled) setTetrominoMode('rgb');
-    try { localStorage.setItem(CUSTOM_CYCLE_STORAGE_KEY, JSON.stringify({ colors: customCycleColors, enabled: customCycleEnabled })); } catch (e) {}
-    applyTetrominoColorsToPieces();
-  };
-  window.__getCustomCycle = function() {
-    return { colors: customCycleColors.slice(), enabled: customCycleEnabled };
-  };
   window.__tetrominoPresets = {
     default: DEFAULT_TETROMINO_COLORS.slice(),
     neon: ['#00e5ff', '#fff44f', '#d946ef', '#3b82f6', '#ff8a00', '#35f28c', '#ff4d4d'],
     rgb: RGB_TETROMINO_COLORS.slice(),
-    retro: ['#4dd0e1', '#f5d76e', '#b39ddb', '#6c8cff', '#ffb347', '#8fd694', '#ff7f7f']
+    'custom-cycle': getStoredCycleColors().slice()
   };
 
   // ——— HUD & GRID COLOR CALLBACKS ———
@@ -487,7 +513,7 @@ const TETROMINOS_90_DEGREE = {
   function startRgbTicker() {
     if (rgbAnimationTicker) return;
     rgbAnimationTicker = setInterval(() => {
-      if (!rgbMode) return;
+      if (!isCycleActive()) return;
       if (shouldAnimateRgbBoard()) {
         applyTetrominoColorsToPieces();
       }
@@ -1400,7 +1426,7 @@ function showLevels() {
     for (let r=0; r<shape.length; r++) {
         for (let c=0; c<shape[r].length; c++) {
             if (shape[r][c]) {
-                drawCell(currentPiece.x + c, currentPiece.y + r, currentPiece.color);
+                drawCell(currentPiece.x + c, currentPiece.y + r, getTetrominoColorForType(currentPiece.type));
             }
         }
     }
@@ -1585,14 +1611,14 @@ function dropPiece(isUser = false) {
   }
 
   function placePiece() {
-      const rgbCell = rgbMode && rgbCycleAfterPlace;
+      const rgbCell = isCycleActive() && rgbCycleAfterPlace;
       for (let r=0; r<currentPiece.shape.length; r++) {
           for (let c=0; c<currentPiece.shape[r].length; c++) {
               if (currentPiece.shape[r][c]) {
                   let x=currentPiece.x+c, y=currentPiece.y+r;
                   if (y>=0 && y<GRID_HEIGHT) {
                       grid[y][x] = rgbCell
-                        ? { __rgbCell: true, type: currentPiece.type, color: currentPiece.color, baseColor: currentPiece.color }
+                        ? { __rgbCell: true, type: currentPiece.type, color: getTetrominoColorForType(currentPiece.type), baseColor: getTetrominoColorForType(currentPiece.type) }
                         : currentPiece.color;
                   }
               }
