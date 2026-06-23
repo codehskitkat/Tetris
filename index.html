@@ -1684,6 +1684,10 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     return window.__tetrominoMode === 'rgb' || detectActivePreset(currentColors || getColors()) === 'rgb';
   }
 
+  function isCustomCycleActive(){
+    return window.__tetrominoMode === 'custom';
+  }
+
   function getRgbAfterPlaceEnabled() {
     try {
       const raw = localStorage.getItem(RGB_AFTER_PLACE_STORAGE_KEY);
@@ -1707,6 +1711,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const cycleOn = mode === 'custom';
     const rgbOn = mode === 'rgb';
     if (rgbControl) rgbControl.style.display = rgbOn ? 'flex' : 'none';
+    if (listEl) listEl.style.display = cycleOn ? 'none' : 'flex';
     if ($('t-cycle-control')) $('t-cycle-control').style.display = cycleOn ? 'flex' : 'none';
     const speed = Math.max(60, Math.min(1000, Number(window.__getTetrominoRgbSpeed ? window.__getTetrominoRgbSpeed() : window.__tetrominoRgbSpeed || 140) || 140));
     if (rgbSlider) rgbSlider.value = String(speed);
@@ -1813,11 +1818,13 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     listEl.innerHTML = '';
 
     const rgbOn = isRgbActive();
+    const customOn = isCustomCycleActive();
+    const displayColors = customOn ? getCycleColors() : currentColors.slice();
 
     PIECES.forEach((piece, idx) => {
       const row = document.createElement('div');
       row.className = 't-setting-row';
-      row.classList.toggle('cycle-mode', rgbOn);
+      row.classList.toggle('cycle-mode', rgbOn || customOn);
 
       const label = document.createElement('div');
       label.className = 'piece';
@@ -1828,14 +1835,21 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
       const input = document.createElement('input');
       input.type = 'color';
-      input.value = currentColors[idx] || '#ffffff';
+      input.value = displayColors[idx] || '#ffffff';
 
 
       const hex = document.createElement('div');
       hex.className = 'hex';
-      hex.textContent = (currentColors[idx] || '').toUpperCase();
+      hex.textContent = (displayColors[idx] || '').toUpperCase();
 
       const commitColor = () => {
+        if (customOn) {
+          const next = getCycleColors();
+          next[idx] = input.value;
+          hex.textContent = input.value.toUpperCase();
+          saveCycleColors(next, true);
+          return;
+        }
         currentColors[idx] = input.value;
         hex.textContent = input.value.toUpperCase();
         persistColors(currentColors, true, { mode: 'static' });
