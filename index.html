@@ -2723,19 +2723,6 @@ setTimeout(function(){
     setTextContent('t-bg-color-hex', DEFAULT_COLOR.bgColor.toUpperCase());
     setTextContent('t-grid-color-hex', DEFAULT_COLOR.gridColor.toUpperCase());
     setTextContent('t-outline-color-hex', DEFAULT_COLOR.outlineColor.toUpperCase());
-
-    if (typeof window.__setTetrominoColors === 'function') {
-      try { window.__setTetrominoColors(DEFAULT_TETROMINO_COLORS, { mode: 'static' }); } catch (e) {}
-    }
-    if (typeof window.__setTetrominoCycleMode === 'function') {
-      try { window.__setTetrominoCycleMode('static'); } catch (e) {}
-    }
-    if (typeof window.__setTetrominoRgbSpeed === 'function') {
-      try { window.__setTetrominoRgbSpeed(140); } catch (e) {}
-    }
-    if (typeof window.__setTetrominoRgbAfterPlace === 'function') {
-      try { window.__setTetrominoRgbAfterPlace(false); } catch (e) {}
-    }
   }
 
   const funBtn=document.getElementById('t-fun-reset-defaults');
