@@ -2048,6 +2048,25 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     syncRgbUi();
   }
 
+  function updateCycleColorAtIndex(idx, color) {
+    const next = getCycleColors();
+    if (!Array.isArray(next) || idx < 0 || idx >= next.length) return;
+    const safeColor = String(color || '').trim() || '#ffffff';
+    next[idx] = safeColor;
+    const normalized = normalizeCycleColors(next);
+    try { localStorage.setItem(CYCLE_COLORS_STORAGE_KEY, JSON.stringify(normalized)); } catch (e) {}
+    if (typeof window.__setTetrominoCycleColors === 'function') {
+      window.__setTetrominoCycleColors(normalized);
+    }
+    if ((window.__tetrominoMode || 'static') !== 'custom') {
+      setCycleMode('custom');
+    }
+    // Keep the live board/HUD preview in sync without rebuilding the editor.
+    try {
+      if (typeof applyTetrominoColorsToPieces === 'function') applyTetrominoColorsToPieces();
+    } catch (e) {}
+  }
+
   function renderCycleCustom() {
     const listEl = $('t-cycle-list');
     if (!listEl) return;
@@ -2081,17 +2100,13 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       remove.title = canRemove ? 'Remove this color' : 'At least one color is required';
 
       const commit = () => {
-        const next = getCycleColors();
-        next[idx] = input.value;
-        saveCycleColors(next, true);
+        hex.textContent = input.value.toUpperCase();
+        updateCycleColorAtIndex(idx, input.value);
       };
 
       input.addEventListener('pointerdown', e => e.stopPropagation());
       input.addEventListener('click', e => e.stopPropagation());
-      input.addEventListener('input', () => {
-        hex.textContent = input.value.toUpperCase();
-        commit();
-      });
+      input.addEventListener('input', commit);
       input.addEventListener('change', commit);
       remove.addEventListener('click', (e) => {
         e.preventDefault();
