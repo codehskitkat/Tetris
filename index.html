@@ -2753,20 +2753,20 @@ setTimeout(function(){
     ev.preventDefault();
     ev.stopPropagation();
     try{
-      localStorage.removeItem('tetris_color_custom_v1');
-      localStorage.removeItem('tetris_tetromino_preset_v1');
-      localStorage.removeItem('tetris_tetromino_colors');
-      localStorage.removeItem('tetris_tetromino_mode');
-      localStorage.removeItem('tetris_rgb_cycle_ms');
-      localStorage.removeItem('tetris_rgb_after_place_cycle');
-      localStorage.removeItem('tetris_custom_cycle_colors_v1');
-      localStorage.removeItem('tetris_custom_cycle_ms_v1');
-      localStorage.removeItem('tetris_custom_cycle_after_place_v1');
-      localStorage.removeItem('tetrisTetrominoColors');
-      localStorage.removeItem('tetrisColorCustomization');
-    }catch(e){}
-    resetColorUi();
-    setTimeout(()=>location.reload(), 50);
+      const saved = getColorCustom();
+      const next = {
+        hudColor: DEFAULT_COLOR.hudColor,
+        nameColor: DEFAULT_COLOR.nameColor,
+        bgColor: DEFAULT_COLOR.bgColor,
+        gridColor: DEFAULT_COLOR.gridColor,
+        outlineColor: saved.outlineColor || DEFAULT_COLOR.outlineColor
+      };
+      localStorage.setItem(COLOR_CUSTOM_STORAGE_KEY, JSON.stringify(next));
+      applyColorCustomToGame(next);
+      renderColorCustom();
+    }catch(e){
+      resetColorUi();
+    }
   });
 
   const desiredTitle=()=>{try{return (JSON.parse(localStorage.getItem('tetris_fun_custom_v1')||'{}').tabTitle)||'Tetris';}catch(e){return 'Tetris';}};
