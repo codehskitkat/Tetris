@@ -1,2842 +1,479 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Tetris</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <link rel="icon" type="image/png" href="https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4" />
-
-  <!-- Firebase libs (unchanged) -->
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-check-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
-  
-  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
-
-  <!-- EARLY GLOBAL HELPERS: ensure these exist before other inline scripts run -->
-  <script>
-window.$ = window.$ || function(id){ return document.getElementById(id); };
-
-    window.safeKey = function(username) {
-      try { return encodeURIComponent(String(username)).replace(/\./g, '%2E'); } catch (e) { return String(username); }
-    };
-    window.saveLocalAuth = function(username, hash) {
-      try { localStorage.setItem('tetris_auth', JSON.stringify({ username, hash })); } catch (e) {}
-    };
-    window.getLocalAuth = function() {
-      try { return JSON.parse(localStorage.getItem('tetris_auth') || 'null'); } catch (e) { return null; }
-    };
-    window.clearLocalAuth = function() {
-      try { localStorage.removeItem('tetris_auth'); } catch (e) {}
-    };
-    window.hashPassword = async function(password) {
-      const enc = new TextEncoder().encode(String(password));
-      const hashBuffer = await crypto.subtle.digest('SHA-256', enc);
-      const arr = Array.from(new Uint8Array(hashBuffer));
-      return arr.map(b => b.toString(16).padStart(2,'0')).join('');
-    };
-  </script>
+  <title>Tetris</title>
 
   <style>
-    /* ---------- Original CSS (kept intact) ---------- */
-    html,body { height:100%; margin:0; background:var(--t-page-bg,#111); display:flex; align-items:center; justify-content:center; }
-    #stage-container { border: 4px solid #222; background:#000; box-shadow: 0 10px 30px rgba(0,0,0,0.7); }
-    canvas { display:block; outline:none; }
-    /* basic instructions */
-    .hint { position:fixed; bottom:10px; left:10px; color:#ddd; font-family:monospace; font-size:12px; }
-    /* plugin effects overlay */
-    /* ------------------------- TETRIS EFFECTS - FULL CSS (engine-free; non-invasive) ------------------------- */
-    :root{
-      --te-z-index: 9999;
-      --te-font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
-      --te-font-weight: 800;
-      --te-accent-1: #80f0ff;
-      --te-accent-2: #ffef6c;
-      --te-accent-3: #ffb86b;
-      --te-white: #ffffff;
-      --te-flash-alpha: 0.12;
-      --te-row-glow-alpha: 0.12;
-      --te-duration-short: 220ms;
-      --te-duration-med: 420ms;
-      --te-duration-long: 900ms;
-    }
-    #tetris-effects-overlay, .tetris-effects-overlay, [data-tetris-effects]{ position: fixed; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: var(--te-z-index); overflow: visible; contain: strict; -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale; isolation: isolate; }
-    #tetris-effects-overlay * , .tetris-effects-overlay * , [data-tetris-effects] * { pointer-events: none !important; }
-    .tetris-flash, [data-te="flash"], .tetris-effects-overlay .tetris-flash { position: absolute; left: 0; top: 0; right: 0; bottom: 0; background: rgba(255,255,255,var(--te-flash-alpha)); opacity: 0; pointer-events: none; mix-blend-mode: screen; will-change: opacity; }
-    .tetris-row-glow, [data-te="row-glow"]{ position: absolute; left: 0; width: 100%; height: 20px; background: linear-gradient(90deg, rgba(255,255,255,var(--te-row-glow-alpha)), rgba(255,255,255,0.02)); filter: blur(6px) saturate(1.2); opacity: 0; pointer-events: none; transform-origin: center; will-change: transform, opacity, filter; border-radius: 4px; box-shadow: 0 6px 16px rgba(0,0,0,0.25), inset 0 0 22px rgba(255,255,255,0.03); animation: te-row-glow 700ms cubic-bezier(.22,.9,.25,1); }
-    .tetris-floating-score, [data-te="float-text"]{ position: absolute; transform: translate(-50%, -50%); font-family: var(--te-font-family); font-weight: var(--te-font-weight); font-size: clamp(14px, 2.0vw, 28px); color: var(--te-white); text-shadow: 0 2px 10px rgba(0,0,0,0.6); pointer-events: none; white-space: nowrap; will-change: transform, opacity; line-height: 1; letter-spacing: 0.6px; padding: 6px 10px; border-radius: 6px; backdrop-filter: blur(6px) saturate(1.1); -webkit-backdrop-filter: blur(6px) saturate(1.1); background: linear-gradient(180deg, rgba(0,0,0,0.08), rgba(0,0,0,0.02)); border: 1px solid rgba(255,255,255,0.04); animation: te-float-up 1200ms cubic-bezier(.2,.9,.2,1) forwards; }
-    .tetris-particle, [data-te="particle"]{ position: absolute; width: 6px; height: 6px; border-radius: 2px; background: var(--te-white); opacity: 1; transform-origin: center; will-change: transform, opacity; pointer-events: none; box-shadow: 0 6px 12px rgba(0,0,0,0.25); animation: te-particle-move 700ms cubic-bezier(.2,.9,.2,1) forwards; }
-    .te-accent-1 { background: var(--te-accent-1) !important; color: var(--te-accent-1) !important; } .te-accent-2 { background: var(--te-accent-2) !important; color: var(--te-accent-2) !important; } .te-accent-3 { background: var(--te-accent-3) !important; color: var(--te-accent-3) !important; }
-    @keyframes te-float-up { 0% { transform: translate(-50%, -50%) translateY(0) scale(0.96); opacity: 1; } 30% { transform: translate(-50%, -50%) translateY(-28px) scale(1.06); opacity: 1; } 100% { transform: translate(-50%, -50%) translateY(-60px) scale(0.96); opacity: 0; } }
-    @keyframes te-row-glow { 0% { opacity: 0; transform: scaleX(0.92); filter: blur(0px) saturate(1); } 25% { opacity: 0.95; transform: scaleX(1.02); filter: blur(6px) saturate(1.2); } 100% { opacity: 0; transform: scaleX(1.05); filter: blur(12px) saturate(1); } }
-    @keyframes te-particle-move { 0% { transform: translate3d(0,0,0) scale(1); opacity: 1; filter: blur(0px); } 70% { opacity: 0.9; } 100% { transform: translate3d(var(--te-dx, 40px), var(--te-dy, -60px), 0) rotate(var(--te-rot, 0deg)) scale(0.6); opacity: 0; filter: blur(0.5px); } }
-    @media (max-width: 640px) { .tetris-floating-score { font-size: clamp(12px, 4.4vw, 20px); padding: 5px 8px; } .tetris-row-glow { filter: blur(4px); } }
-    @media (prefers-reduced-motion: reduce) { .tetris-floating-score, .tetris-row-glow, .tetris-particle, .tetris-flash { animation: none !important; transition: none !important; } .tetris-flash { opacity: 0 !important; } }
-    [data-tetris-effects].te-debug * { outline: 1px dashed rgba(255,255,255,0.06); } [data-tetris-effects].te-debug .tetris-floating-score { background: rgba(0,0,0,0.2); }
-    :root{ --hud-bg: rgba(10,12,18,0.72); --hud-accent-1: #6ee7b7; --hud-accent-2: #7dd3fc; --hud-accent-3: #fbcfe8; --glass-border: rgba(255,255,255,0.06); --glass-glow: rgba(110,231,183,0.14); --te-cell-size: 30px; }
-    #tetris-hud-overlay{ position: fixed; left: 0; top: 0; width: 0; height: 0; pointer-events: none; z-index: 9998; font-family: Inter, "Segoe UI", Roboto, system-ui, -apple-system, "Helvetica Neue", Arial; -webkit-font-smoothing:antialiased; display: flex; align-items: flex-start; justify-content: flex-end; }
-    #tetris-hud { pointer-events: auto; margin: 12px; width: 220px; min-height: 220px; border: 1px solid var(--glass-border); color: #ecf0f5; padding: 16px; display: flex; flex-direction: column; gap: 12px; transform-origin: right top; transition: transform .18s cubic-bezier(.2,.9,.2,1); }
-    #tetris-hud .hud-header{ display:flex; align-items:center; gap:10px; } #tetris-hud .logo { width:44px;height:44px;border-radius:10px; display:flex;align-items:center;justify-content:center; font-weight:700;color:#052b21; } #tetris-hud .title { font-size:14px; font-weight:700; letter-spacing:0.6px; }
-    .hud-stats { display:flex; flex-direction:column; gap:8px; } .hud-row { display:flex;justify-content:space-between;align-items:center; } .hud-row .label { font-size:12px; opacity:0.78; } .hud-row .value { font-size:18px; font-weight:700; letter-spacing:0.6px; }
-    .hud-next { display:flex; gap:12px; align-items:center; } .next-canvas { width: calc(var(--te-cell-size) * 4); height: calc(var(--te-cell-size) * 4); background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.03)); border-radius:8px; border:1px solid rgba(255,255,255,0.03); display:block; }
-    .hud-actions { display:flex; gap:8px; align-items:center; justify-content:space-between; margin-top:6px; } .hud-button { padding:8px 10px; border-radius:10px; border:1px solid rgba(255,255,255,0.04); background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(255,255,255,0.01)); font-weight:600; font-size:13px; cursor:pointer; pointer-events:auto; transition: transform .12s ease, box-shadow .12s ease; } .hud-button:active { transform: translateY(1px); } .hud-button.secondary { background: linear-gradient(180deg, rgba(0,0,0,0.15), rgba(255,255,255,0.01)); color: var(--hud-accent-2); }
-    .level-bar { width:100%; height:8px;border-radius:6px;overflow:hidden;background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.02); } .level-bar .fill { height:100%; width:0%; background: linear-gradient(90deg, var(--hud-accent-1), var(--hud-accent-2)); transition: width 360ms cubic-bezier(.2,.9,.2,1); box-shadow: 0 6px 16px rgba(125,211,252,0.08) inset; }
-    .hud-floating { position:absolute; left:50%; top:10%; transform:translateX(-50%); pointer-events:none; font-weight:800; font-size:18px; color:var(--hud-accent-1); text-shadow: 0 6px 24px rgba(110,231,183,0.08); animation: hud-pop .9s forwards; }
-    @keyframes hud-pop { 0% { opacity:0; transform: translate(-50%, +4px) scale(.9); } 60% { opacity:1; transform: translate(-50%, -12px) scale(1.06); } 100% { opacity:0; transform: translate(-50%, -36px) scale(1); } }
-    @media (max-width:720px){ #tetris-hud { width: 170px; padding:12px; margin:8px; } .title{ font-size:13px; } }
-    .fps { position: fixed; left: 10px; bottom: 28px; color: #ddd; font-family: monospace; font-size: 12px; pointer-events: none; }
-    #tetris-bg { position: absolute; width: 400px; height: 600px; left: 50%; top: 50%; transform: translate(-50%, -50%); z-index: 0; }
-    #game { position: relative; z-index: 1; }
-    /* Modal-specific minor tweaks */
-    .t-modal { width: 360px; background: #0b0b0d; color:#eee; padding:18px; border-radius:12px; box-shadow:0 12px 40px rgba(0,0,0,0.6); font-family: Inter, system-ui, sans-serif; }
-    .t-modal h3{ margin:0 0 8px; font-size:16px }
-    .t-row{ margin:8px 0; }
-    .t-row input{ width:100%; padding:10px; border-radius:8px; border:1px solid rgba(255,255,255,0.06); background: rgba(255,255,255,0.02); color:#fff; box-sizing:border-box; }
-    .t-actions{ display:flex; gap:8px; margin-top:12px; }
-    .t-btn{ padding:8px 10px; border-radius:8px; cursor:pointer; border:1px solid rgba(255,255,255,0.06); background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02)); color:#fff; }
-    .t-btn.secondary{ background:transparent; color:#9bd; }
-    .t-close{ position:absolute; right:14px; top:12px; cursor:pointer; color:rgba(255,255,255,0.6); }
-    #tetris-top5-list{ list-style:none; padding:0; margin:0; }
-    #tetris-top5-list li{ padding:8px 6px; border-bottom:1px solid rgba(255,255,255,0.03); display:flex; justify-content:space-between; align-items:center; }
-
-    /* ----- Chat lock overlay & bind UI ----- */
-    #t-chat-lock-overlay {
-      position: absolute;
-      inset: 0;
-      z-index: 10008;
-      display:flex;
-      height: 80%;
-      
-      align-items:center;
-      justify-content:center;
-      padding:12px;
-      box-sizing:border-box;
-
-    }
-    #t-chat-lock-inner {
-      width:100%;
-      max-width:320px;
-      background: rgba(255,255,255,0.03);
-      border-radius:10px;
-      padding:12px;
-      text-align:center;
-      color: #eaf7ee;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.6);
-    }
-    #t-chat-lock-inner input[type="password"] {
-      width:100%;
-      box-sizing:border-box;
-      padding:8px;
-      border-radius:8px;
-      border:1px solid rgba(255,255,255,0.05);
-      background: rgba(0,0,0,0.4);
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      background: #000;
       color: #fff;
-      margin-bottom:8px;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
     }
-    #t-chat-lock-inner button { padding:8px 10px; border-radius:8px; border: none; cursor:pointer; }
-
-    #t-chat-bind-row { display:flex; gap:6px; align-items:center; margin-left:8px; }
-    #t-chat-bind-mode, #t-chat-bind-key {
-      background:transparent;
-      border:1px solid rgba(255,255,255,.04);
-      color:#fff;
-      padding:4px 6px;
-      border-radius:6px;
-      font-size:12px;
+    #status {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      text-align: center;
+      line-height: 1.5;
+      white-space: pre-wrap;
     }
-    #t-chat-bind-key { width:56px; text-align:center; }
-  
-    .t-text-input{width:100%;height:34px;box-sizing:border-box;padding:0 10px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(0,0,0,.18);color:#fff;font-size:12px;outline:none}
-    .t-text-input::placeholder{color:rgba(255,255,255,.38)}
-    .t-cycle-toolbar{display:flex;gap:8px;flex-wrap:wrap}
-    .t-cycle-toolbar .t-mini-btn{flex:1 1 auto}
-    .t-cycle-list{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;padding-right:2px}
-    .t-cycle-section{display:flex;flex-direction:column;gap:8px;padding:10px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)}
-    .t-cycle-section-title{font-size:12px;font-weight:700;letter-spacing:.02em;opacity:.9}
-    .t-cycle-row{display:grid;grid-template-columns:90px 1fr auto auto;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04)}
-    .t-cycle-row .hex{min-width:58px;text-align:right;font-variant-numeric:tabular-nums}
-    .t-cycle-remove{padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#fff;cursor:pointer;font-size:11px}
-    .t-cycle-remove:hover{background:rgba(255,255,255,.08)}
-    .t-setting-row.cycle-mode .t-setting-control input[type="color"]{opacity:0;pointer-events:none}
-    .t-setting-row.cycle-mode .t-rgb-chip{opacity:1}
-
+    .small {
+      opacity: 0.75;
+      margin-top: 10px;
+      font-size: 13px;
+      word-break: break-all;
+      max-width: 900px;
+    }
   </style>
 </head>
 <body>
-  <img id="tetris-bg" src="https://codehs.com/uploads/90bcd5135eb53e41393efe90eafbf36b" alt="tetris background gif" />
-  <div id="stage-container">
-    <canvas id="game" tabindex="0" style="visibility: hidden;"></canvas>
-  </div>
-
-  <div class="hint" id="t-hint-bar">Arrow keys to move • Up/Z to rotate • Space hard drop • P pause • R restart</div>
-
-  <!-- Auth modal and Top5 overlay are now static DOM (no long JS string) -->
-  <div id="tetris-auth-modal" style="display:none; position: fixed; left:0; top:0; right:0; bottom:0; align-items:center; justify-content:center; z-index:10005;">
-    <div class="t-modal" id="tetris-auth-box">
-      <div style="position:relative;">
-        <span class="t-close" id="tetris-auth-close">✕</span>
-      </div>
-      <h3>Tetris — sign in / register</h3>
-      <div class="t-row"><input id="tetris-username" maxlength="17" placeholder="username (no slashes)" /></div>
-      <div class="t-row"><input id="tetris-password" type="password" maxlength="50" placeholder="password" /></div>
-      <div style="font-size:12px; color:rgba(255,255,255,0.66)">We store a hashed password; nothing is sent to a 3rd party other than your Firebase database.</div>
-      <div class="t-actions">
-        <button class="t-btn" id="tetris-signup">Create account</button>
-        <button class="t-btn secondary" id="tetris-login">Log in</button>
-      </div>
-      <div id="tetris-auth-msg" style="margin-top:8px;font-size:13px;color:#eaa;"></div>
-    </div>
-  </div>
-
-  <div id="tetris-top5-overlay" style="display:none; position: fixed; left:0; top:0; right:0; bottom:0; align-items:center; justify-content:center; z-index:10005;">
-    <div class="t-modal" style="max-width:420px;">
-      <div style="position:relative;">
-        <span class="t-close" id="tetris-top5-close">✕</span>
-      </div>
-      <h3>Score in A Run</h3>
-      <ul id="tetris-top5-list"></ul>
-      <div style="margin-top:8px; text-align:right;"><button class="t-btn" id="tetris-top5-refresh">Refresh</button></div>
-    </div>
-  </div>
-
-  <!-- engine & game -->
-  <script src="js/engine.js"></script>
-  <script src="js/game.js"></script>
-
-  <script>
-    // Use the global helpers defined in head
-    const safeKey = window.safeKey;
-    const saveLocalAuth = window.saveLocalAuth;
-    const getLocalAuth = window.getLocalAuth;
-    const clearLocalAuth = window.clearLocalAuth;
-    const hashPassword = window.hashPassword;
-
-    // ---------- Firebase init ----------
-    if (!window.firebase || !firebase.apps.length) {
-      firebase.initializeApp({
-        apiKey: "AIzaSyD7Wrw1Y2VLdB3k810iBQKTCtuZI07j76s",
-        authDomain: "tetris-ff5a4.firebaseapp.com",
-        databaseURL: "https://tetris-ff5a4-default-rtdb.firebaseio.com",
-        projectId: "tetris-ff5a4",
-        storageBucket: "tetris-ff5a4.firebasestorage.app",
-        messagingSenderId: "192291232109",
-        appId: "1:192291232109:web:421b951c047ceeaa4fe264",
-        measurementId: "G-5GQQFVG893"
-      });
-    }
-    const db = firebase.database();
-
-    // ---------- Auth logic ----------
-    let CURRENT_USER = null;
-
-    function showAuthMsg(text, ok=false){
-      const el = document.getElementById('tetris-auth-msg');
-      if (!el) return;
-      el.style.color = ok ? '#8f8' : '#f88';
-      el.textContent = text;
-    }
-
-    function showAuthPrompt(){
-      const modal = document.getElementById('tetris-auth-modal');
-      if (!modal) return;
-      modal.style.display = 'flex';
-      const u = document.getElementById('tetris-username');
-      if (u) u.focus();
-    }
-
-    function hideAuthPrompt(){
-      const modal = document.getElementById('tetris-auth-modal');
-      if (!modal) return;
-      modal.style.display = 'none';
-    }
-
-    document.getElementById('tetris-auth-close').addEventListener('click', ()=> { hideAuthPrompt(); });
-
-    async function createAccount(username, password){
-      username = (username||'').trim();
-      if (!username) return showAuthMsg('enter a username');
-      if (username.length > 17) return showAuthMsg('username cannot exceed 17 characters');
-      if (!password || password.length < 3) return showAuthMsg('password too short (min 3 chars)');
-      if (password.length > 50) return showAuthMsg('password cannot exceed 50 characters');
-      const key = safeKey(username);
-      const userRef = db.ref('users/' + key);
-      const snapshot = await userRef.once('value');
-      if (snapshot.exists()) return showAuthMsg('username already exists — choose another or log in');
-      const hash = await hashPassword(password);
-      const payload = { passwordHash: hash, totalLines: 0, createdAt: Date.now() };
-      await userRef.set(payload);
-      saveLocalAuth(username, hash);
-      CURRENT_USER = { username, hash };
-      showAuthMsg('account created — signed in', true);
-      hideAuthPrompt();
-      onSignedIn();
-    }
-
-    async function signIn(username, password){
-      username = (username||'').trim();
-      if (!username) return showAuthMsg('enter username');
-      if (username.length > 17) return showAuthMsg('username cannot exceed 17 characters');
-      if (!password) return showAuthMsg('enter password');
-      if (password.length > 50) return showAuthMsg('password cannot exceed 50 characters');
-      const key = safeKey(username);
-      const userRef = db.ref('users/' + key);
-      const snap = await userRef.once('value');
-      if (!snap.exists()) return showAuthMsg('no account found for that username');
-      const remote = snap.val();
-      const hash = await hashPassword(password);
-      if (hash !== remote.passwordHash) return showAuthMsg('incorrect password');
-      saveLocalAuth(username, hash);
-      CURRENT_USER = { username, hash };
-      showAuthMsg('signed in', true);
-      hideAuthPrompt();
-      onSignedIn();
-    }
-
-    document.getElementById('tetris-signup').addEventListener('click', async ()=>{ const u = document.getElementById('tetris-username').value; const p = document.getElementById('tetris-password').value; await createAccount(u,p); });
-    document.getElementById('tetris-login').addEventListener('click', async ()=>{ const u = document.getElementById('tetris-username').value; const p = document.getElementById('tetris-password').value; await signIn(u,p); });
-
-    function onSignedIn(){
-      try { localStorage.setItem('tetris_user', JSON.stringify({ username: CURRENT_USER.username, signedAt: Date.now() })); } catch(e){}
-      console.log('signed in as', CURRENT_USER.username);
-      if (window.__tetrisHUD && typeof window.__tetrisHUD.setUsername === 'function') { window.__tetrisHUD.setUsername(CURRENT_USER.username); }
-      try { window.showLogoutButton && window.showLogoutButton(true); window.showLoginButton && window.showLoginButton(false); } catch(e){}
-    }
-
-    // Auto sign-in attempt
-    async function tryAutoSignIn() {
-      const auth = (typeof getLocalAuth === 'function') ? getLocalAuth() : null;
-      // If no auth data exists, show the prompt and exit.
-      if (!auth || !auth.username || !auth.hash) {
-        showAuthPrompt();
-        return;
-      }
-      const key = safeKey(auth.username);
-      try {
-        const snap = await db.ref('users/' + key + '/passwordHash').once('value');
-        if (!snap.exists()) {
-          clearLocalAuth();
-          showAuthPrompt(); // Added here for a different scenario
-          return;
-        }
-        const remoteHash = snap.val();
-        if (remoteHash === auth.hash) {
-          CURRENT_USER = {
-            username: auth.username,
-            hash: auth.hash
-          };
-          onSignedIn();
-          return;
-        } else {
-          clearLocalAuth();
-          showAuthPrompt();
-          return;
-        }
-      } catch (err) {
-        console.warn('auto sign-in failed', err);
-        // You might also want to show the prompt on a network error.
-        showAuthPrompt();
-      }
-    }
-
-    tryAutoSignIn();
-
-    // ---------- Top5 / leaderboard ----------
-    function formatCompactNumber(n) {
-      if (n === null || n === undefined || isNaN(n)) return '0';
-      const num = Number(n);
-      const abs = Math.abs(num);
-
-      if (abs < 1000) {
-        return num.toLocaleString();
-      }
-
-      const units = ['k', 'm', 'b', 't'];
-      let value = abs;
-      let unitIndex = -1;
-
-      while (value >= 1000 && unitIndex < units.length - 1) {
-        value /= 1000;
-        unitIndex++;
-      }
-
-      let formatted = value.toFixed(2).replace(/\.?0+$/g, '');
-
-      if (num < 0) formatted = '-' + formatted;
-      return formatted + units[unitIndex];
-    }
-
-    async function fetchTop5(){
-      const ref = db.ref('users').orderByChild('totalLines').limitToLast(5);
-      const snap = await ref.once('value');
-      const data = snap.val() || {};
-      const arr = Object.keys(data).map(k => {
-        const uname = decodeURIComponent(k);
-        const val = data[k];
-        return { username: uname, totalLines: val.totalLines || 0 };
-      }).sort((a,b)=> b.totalLines - a.totalLines);
-      return arr;
-    }
-
-    async function fetchAndShowTop5(){
-      const overlay = document.getElementById('tetris-top5-overlay');
-      const list = document.getElementById('tetris-top5-list');
-      list.innerHTML = '<li style="opacity:0.6">loading…</li>';
-      overlay.style.display = 'flex';
-      try {
-        const arr = await fetchTop5();
-        if (!arr.length) {
-          list.innerHTML = '<li style="opacity:0.7">no players yet</li>';
-          return;
-        }
-        list.innerHTML = '';
-        arr.forEach((p,i) => {
-          const li = document.createElement('li');
-          const full = Number(p.totalLines).toLocaleString();
-          const compact = formatCompactNumber(p.totalLines);
-          li.innerHTML = `
-            <span style="font-weight:700">${i+1}. ${escapeHtml(p.username)}</span>
-            <span style="opacity:0.9" title="${full}">${compact}</span>
-          `;
-          list.appendChild(li);
-        });
-      } catch (err) {
-        list.innerHTML = '<li style="color:#f88">failed to load</li>';
-        console.error(err);
-      }
-    }
-
-    document.getElementById('tetris-top5-close').addEventListener('click', ()=> { document.getElementById('tetris-top5-overlay').style.display='none'; });
-    document.getElementById('tetris-top5-refresh').addEventListener('click', fetchAndShowTop5);
-
-    function escapeHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
-
-    // ---------- Update user lines ----------
-    async function updateHighScore(count) {
-      if (!count || count <= 0) return;
-
-      const auth = CURRENT_USER || (typeof getLocalAuth === 'function' ? getLocalAuth() : null);
-
-      if (!auth || !auth.username) {
-        try {
-          const prev = Number(localStorage.getItem('tetris_guest_lines') || 0);
-          if (count > prev) {
-            localStorage.setItem('tetris_guest_lines', String(count));
-          }
-        } catch (e) {
-          console.warn('updateHighScore (guest) failed to access localStorage', e);
-        }
-        return;
-      }
-
-      const key = safeKey(auth.username);
-      const totalLinesRef = db.ref('users/' + key + '/totalLines');
-
-      try {
-        const result = await totalLinesRef.transaction(current => {
-          const prev = current || 0;
-          if (count <= prev) {
-            return;
-          }
-          return count;
-        });
-
-        if (result && result.committed) {
-          await db.ref('users/' + key + '/lastUpdated').set(Date.now());
-          try {
-            localStorage.setItem('tetris_user_totalLines', String(count));
-          } catch (e) {}
-        }
-      } catch (err) {
-        console.warn('updateHighScore failed', err);
-      }
-    }
-
-    // ---------- Menu injection (non-fatal, safe) ----------
-    if (typeof showMenu === 'function') {
-      const origShowMenu = showMenu;
-      window.showMenu = function(...args){
-        origShowMenu.apply(this, args);
-        setTimeout(()=> {
-          if (!window.__top5Injected) {
-            try { if (typeof injectTop5ButtonToMenu === 'function') injectTop5ButtonToMenu(); } catch(e){ console.warn('injectTop5ButtonToMenu missing', e); }
-            window.__top5Injected = true;
-          }
-        }, 40);
-      };
-    }
-
-    // Expose convenience API
-    window.tetrisAuth = {
-      showLoginModal: showAuthPrompt,
-      signIn,
-      createAccount,
-      signOut: () => { try { clearLocalAuth(); } catch(e){} CURRENT_USER = null; try { localStorage.removeItem('tetris_user'); } catch(e){} console.log('signed out'); }
-    };
-  </script>
-
-  <!-- Logout / Login buttons + helpers -->
-  <style>
-    #tetris-logout-btn{ position: fixed; right: 12px; top: 12px; z-index: 10006; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06); background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02)); color: #fff; font-weight: 700; cursor: pointer; pointer-events: auto; box-shadow: 0 6px 18px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
-    #tetris-logout-btn:active { transform: translateY(1px); }
-    #tetris-login-btn{ position: fixed; right: 112px; top: 12px; z-index: 10006; padding: 8px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.06); background: linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02)); color: #fff; font-weight: 700; cursor: pointer; pointer-events: auto; box-shadow: 0 6px 18px rgba(0,0,0,0.35); backdrop-filter: blur(6px); }
-    #tetris-login-btn:active { transform: translateY(1px); }
-  </style>
-
-  <script>
-    (function(){
-      function createLogoutButtonIfMissing(){
-        if (document.getElementById('tetris-logout-btn')) return;
-        const btn = document.createElement('button');
-        btn.id = 'tetris-logout-btn';
-        btn.type = 'button';
-        btn.title = 'Sign out and refresh';
-        btn.textContent = 'Log out';
-        btn.addEventListener('click', async () => {
-          try {
-            try { if (typeof clearLocalAuth === 'function') clearLocalAuth(); } catch(e){}
-            CURRENT_USER = null;
-            try { localStorage.removeItem('tetris_user'); } catch(e){}
-            try { localStorage.removeItem('tetris_user_totalLines'); } catch(e){}
-            try { if (window.firebase && firebase.auth && firebase.auth().signOut) { await firebase.auth().signOut(); } } catch(e){ console.warn('firebase.auth().signOut() failed or not used', e); }
-            showLogoutButton(false);
-            location.reload();
-          } catch (err) {
-            console.error('Sign-out failed:', err);
-            location.reload();
-          }
-        });
-        document.body.appendChild(btn);
-      }
-      window.showLogoutButton = function(show){
-        createLogoutButtonIfMissing();
-        const el = document.getElementById('tetris-logout-btn');
-        if (!el) return;
-        el.style.display = show ? 'block' : 'none';
-      };
-      createLogoutButtonIfMissing();
-      try {
-        const auth = (typeof getLocalAuth === 'function') ? getLocalAuth() : null;
-        showLogoutButton(!!(CURRENT_USER || auth));
-      } catch(e){ showLogoutButton(false); }
-    })();
-
-    (function(){
-      function createLoginButtonIfMissing(){
-        if (document.getElementById('tetris-login-btn')) return;
-        const btn = document.createElement('button');
-        btn.id = 'tetris-login-btn';
-        btn.type = 'button';
-        btn.title = 'Sign in / create account';
-        btn.textContent = 'Log in';
-        btn.addEventListener('click', () => {
-          try { showAuthPrompt(); } catch (e) { showLoginModal && showLoginModal(); }
-        });
-        document.body.appendChild(btn);
-      }
-      window.showLoginButton = function(show){
-        createLoginButtonIfMissing();
-        const el = document.getElementById('tetris-login-btn');
-        if (!el) return;
-        el.style.display = show ? 'block' : 'none';
-      };
-      createLoginButtonIfMissing();
-      try {
-        const auth = (typeof getLocalAuth === 'function') ? getLocalAuth() : null;
-        const signed = !!(CURRENT_USER || auth);
-        showLoginButton(!signed);
-      } catch(e){ showLoginButton(true); }
-    })();
-  </script>
-
-  <!-- FPS widget -->
-  <script>
-    (function () {
-      const el = document.createElement('div');
-      el.className = 'fps';
-      el.textContent = 'FPS: …';
-      document.body.appendChild(el);
-      let last = performance.now();
-      let frames = 0, acc = 0, lastUpdate = last;
-      document.addEventListener('visibilitychange', () => { last = performance.now(); frames = 0; acc = 0; lastUpdate = last; });
-      function loop(now) {
-        const dt = now - last;
-        last = now;
-        frames += 1;
-        acc += dt;
-        if (now - lastUpdate >= 250) {
-          const fps = Math.round(1000 * frames / acc) || 0;
-          el.textContent = `${fps} FPS`;
-          frames = 0;
-          acc = 0;
-          lastUpdate = now;
-        }
-        requestAnimationFrame(loop);
-      }
-      requestAnimationFrame(loop);
-    })();
-  </script>
-  
-<!-- Condensed Online + Chat UI (preserves original logic) -->
-<style>
-/* shared panel */
-.t-panel{position:fixed;z-index:10007;background:var(--t-panel-bg,rgba(6,8,10,.86));border:1px solid rgba(255,255,255,.04);color:#ecf7ee;font-family:Inter,system-ui,Arial,sans-serif;box-shadow:0 10px 30px rgba(0,0,0,.6);border-radius:10px;overflow:hidden;display:flex;flex-direction:column;backdrop-filter:blur(6px);min-width:200px;min-height:120px}
-.t-panel .hdr{cursor:move;padding:8px 10px;background:linear-gradient(180deg,rgba(255,255,255,.015),rgba(255,255,255,.01));display:flex;align-items:center;gap:8px;user-select:none}
-.t-panel .title{font-weight:800;font-size:13px;flex:1}.t-panel .meta{font-size:12px;opacity:.8}.t-panel .btn{cursor:pointer;padding:6px 8px;border-radius:8px;border:1px solid rgba(255,255,255,.03);background:transparent;font-size:12px}
-.t-panel .body{padding:8px;display:flex;flex-direction:column;gap:8px;overflow:auto}
-.t-player,.t-player-compact{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;background:linear-gradient(180deg,rgba(255,255,255,0),rgba(255,255,255,.01))}
-.t-dot{width:10px;height:10px;border-radius:50%;flex:0 0 10px;background:var(--t-dot-off,#666)}.t-dot.on{background:var(--t-dot-on,#6ee7b7);box-shadow:0 6px 18px color-mix(in srgb, var(--t-dot-on,#6ee7b7) 40%, transparent)}
-.t-chat-messages {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 6px;
-  overflow: auto;
-  scrollbar-width: thin;              /* Firefox */
-  scrollbar-color: rgba(255,255,255,0.3) transparent;
-}
-
-/* Chrome, Edge, Safari */
-.t-chat-messages::-webkit-scrollbar {
-  width: 8px;
-}
-
-.t-chat-messages::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.t-chat-messages::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-  border-radius: 6px;
-  transition: background 0.2s;
-}
-
-.t-chat-messages::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.6);
-}
-
-.t-chat-msg{border-radius:8px;padding:8px;max-width:320px;word-break:break-word;position:relative}
-.t-chat-msg.own{background:linear-gradient(180deg,rgba(110,231,183,.08),rgba(110,231,183,.02));align-self:flex-end}
-.t-chat-msg.other{background:rgba(255,255,255,.02);align-self:flex-start}
-.t-chat-meta{font-size:11px;opacity:.75;margin-bottom:4px;display:flex;gap:8px;align-items:center}
-.t-chat-img{max-width:240px;border-radius:8px;display:block;margin-top:6px;background:transparent}
-.t-msg-delete{margin-left:auto;cursor:pointer;background:transparent;border:1px solid rgba(255,255,255,.04);padding:4px 6px;border-radius:6px;font-size:12px;opacity:.85;color: #fff;}
-.t-chat-text{flex:1;resize:none;min-height:42px;max-height:120px;padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.04);background:rgba(0,0,0,.35);color:#fff;font-size:13px}
-.t-chat-send{padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.04);background:linear-gradient(180deg,rgba(255,255,255,0.02),rgba(0,0,0,0.02));color:#fff;cursor:pointer}
-.t-resize-handle{position:absolute;right:6px;bottom:6px;width:14px;height:14px;cursor:se-resize;border-radius:4px;background:rgba(255,255,255,.3)}
-.t-typing{font-size:12px;opacity:.8;padding:4px 6px}
-
-/* emoji picker & reactions */
-.t-emoji-btn{padding:8px;border-radius:8px;border:1px solid rgba(255,255,255,.04);background:transparent;cursor:pointer;font-size:18px;}
-.t-emoji-picker{position:absolute;z-index:10050;width:400px;background:#0b0b0d;border:1px solid rgba(255,255,255,0.06);box-shadow:0 12px 40px rgba(0,0,0,0.6);border-radius:10px;padding:8px;display:flex;flex-direction:column}
-.t-emoji-tabs{display:flex;gap:6px;margin-bottom:8px}
-.t-emoji-tab{padding:6px 8px;border-radius:8px;cursor:pointer;border:1px solid rgba(255,255,255,.03);background:transparent;font-size:13px;color: #fff}
-.t-emoji-grid{display:grid;grid-template-columns:repeat(8,1fr);gap:6px;max-height:200px;overflow:auto;padding:6px}
-.t-emoji-cell{padding:6px;border-radius:6px;cursor:pointer;font-size:20px;text-align:center;user-select:none}
-.t-emoji-reactions{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px;color: #fff;}
-.t-emoji-reaction{padding:4px 8px;border-radius:999px;background:rgba(0,0,0,0.2);border:1px solid rgba(255,255,255,0.03);font-size:14px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;color: #fff;}
-.t-emoji-reaction.own{box-shadow:0 6px 18px rgba(110,231,183,0.06);border-color:rgba(110,231,183,0.12);color: #fff;}
-.t-react-btn{margin-left:6px;padding:4px 6px;border-radius:6px;border:1px solid rgba(255,255,255,.03);background:transparent;cursor:pointer;font-size:12px;color: #fff;}
-
-.t-settings-body{display:flex;flex-direction:column;gap:10px;height:100%;overflow:hidden}
-.t-settings-page{display:flex;flex-direction:column;gap:10px;min-height:0;height:100%}
-.t-settings-open-presets,.t-settings-back,.t-settings-save{width:100%;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#fff;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:.02em}
-.t-settings-open-presets{background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03))}
-.t-settings-topbar{display:flex;gap:8px}
-.t-settings-topbar > button{flex:1}
-.t-settings-presets{display:flex;flex-wrap:wrap;gap:8px}
-.t-settings-preset{flex:1 1 calc(50% - 8px);min-width:120px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02);color:#fff;cursor:pointer;font-size:12px}
-.t-settings-preset.active{outline:2px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08)}
-.t-settings-list{display:flex;flex-direction:column;gap:10px;min-height:0;overflow:auto;padding-right:2px}
-.t-setting-row{display:grid;grid-template-columns:70px 1fr auto;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04)}
-.t-setting-row .piece{font-weight:700;font-size:12px;letter-spacing:.04em}
-.t-setting-row input[type="color"]{width:100%;height:34px;border:none;background:transparent;padding:0;cursor:pointer}
-.t-setting-row .hex{font-size:11px;opacity:.85;font-variant-numeric:tabular-nums}
-.t-custom-presets{display:flex;flex-direction:column;gap:8px;min-height:0;overflow:auto;padding-right:2px}
-.t-custom-preset{display:flex;align-items:stretch;gap:8px}
-.t-custom-preset-main{flex:1;text-align:left;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03);color:#fff;cursor:pointer;display:flex;flex-direction:column;gap:4px}
-.t-custom-preset-main.active{outline:2px solid rgba(255,255,255,.22);background:rgba(255,255,255,.08)}
-.t-custom-preset-name{font-size:13px;font-weight:700}
-.t-custom-preset-desc{font-size:11px;opacity:.78}
-.t-custom-preset-actions{display:flex;flex-direction:column;gap:6px}
-.t-mini-btn{padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.02);color:#fff;cursor:pointer;font-size:11px;white-space:nowrap}
-.t-rgb-control{display:none;flex-direction:column;gap:8px;padding:10px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)}
-.t-rgb-control-head{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:700}
-.t-rgb-speed-label{opacity:.82;font-variant-numeric:tabular-nums}
-.t-rgb-speed{width:100%}
-.t-rgb-after-place-row{display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer;user-select:none;}
-.t-rgb-after-place-row input{width:16px;height:16px;margin:0;accent-color:#fff;}
-.t-setting-control{position:relative;height:34px}
-.t-setting-control input[type="color"]{position:absolute;inset:0;width:100%;height:34px;margin:0;z-index:1}
-.t-rgb-chip{position:absolute;inset:0;border-radius:8px;background:linear-gradient(90deg,#ff0000,#ff7f00,#ffff00,#00ff00,#0000ff,#8000ff,#ff1493,#ff0000);background-size:300% 100%;animation:tetris-rgb-pan var(--rgb-speed,140ms) linear infinite;opacity:0;pointer-events:none}
-.t-setting-row.rgb-mode .t-setting-control input[type="color"]{opacity:0;pointer-events:none}
-.t-setting-row.rgb-mode .t-rgb-chip{opacity:1}
-.t-settings-preset{display:flex;align-items:center;gap:8px}
-.t-settings-preset-chip{width:18px;height:18px;border-radius:5px;flex:0 0 auto;background:linear-gradient(90deg,#ff0000,#ff7f00,#ffff00,#00ff00,#0000ff,#8000ff,#ff1493,#ff0000);background-size:300% 100%;opacity:0}
-.t-settings-preset.rgb-mode .t-settings-preset-chip{opacity:1;animation:tetris-rgb-pan var(--rgb-speed,140ms) linear infinite}
-.t-cycle-remove:disabled{opacity:.35;cursor:not-allowed}
-.t-rgb-preview-card{display:flex;flex-direction:column;gap:10px;padding:12px;border-radius:12px;border:1px solid rgba(255,255,255,.06);background:rgba(255,255,255,.03)}
-.t-rgb-preview-title{font-size:12px;font-weight:700;opacity:.86;letter-spacing:.02em}
-.t-rgb-preview-bar-wrap{height:26px;border-radius:999px;padding:3px;border:1px solid rgba(255,255,255,.06);background:rgba(0,0,0,.18)}
-.t-rgb-preview-bar{height:100%;width:100%;border-radius:999px;background:linear-gradient(90deg,#ff0000,#ff7f00,#ffff00,#00ff00,#0000ff,#8000ff,#ff1493,#ff0000);background-size:300% 100%;animation:tetris-rgb-pan var(--rgb-speed,140ms) linear infinite}
-.t-rgb-preview-meta{font-size:11px;opacity:.75;font-variant-numeric:tabular-nums;text-align:right}
-@keyframes tetris-rgb-pan{0%{background-position:0% 50%}100%{background-position:200% 50%}}
-
-/* ── Settings Panel Nav & Sub-pages ── */
-.t-nav-btn{width:100%;padding:12px 14px;border-radius:12px;border:1px solid rgba(255,255,255,.1);background:linear-gradient(180deg,rgba(255,255,255,.08),rgba(255,255,255,.03));color:#fff;cursor:pointer;font-size:13px;font-weight:700;letter-spacing:.02em;text-align:left;display:flex;align-items:center;gap:10px;transition:background 150ms}
-.t-nav-btn:hover{background:linear-gradient(180deg,rgba(255,255,255,.14),rgba(255,255,255,.06))}
-.t-nav-btn .t-nav-icon{font-size:18px;width:24px;text-align:center}
-.t-nav-btn .t-nav-label{flex:1}
-.t-nav-btn .t-nav-arrow{opacity:.45;font-size:14px}
-.t-settings-back-btn{width:100%;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:#fff;cursor:pointer;font-size:13px;font-weight:700;display:flex;align-items:center;gap:6px}
-.t-settings-back-btn:hover{background:rgba(255,255,255,.08)}
-.t-page-title{font-size:13px;font-weight:700;opacity:.7;margin:2px 0 4px;padding-left:2px}
-
-/* ── Keybind rows ── */
-.t-keybind-row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04)}
-.t-keybind-btn{padding:6px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:#fff;cursor:pointer;font-size:12px;font-weight:700;font-variant-numeric:tabular-nums;min-width:80px;text-align:center;transition:all 150ms}
-.t-keybind-btn:hover{background:rgba(255,255,255,.12)}
-.t-keybind-btn.listening{background:rgba(125,211,252,.18);border-color:rgba(125,211,252,.45);color:#7dd3fc;animation:t-pulse 900ms ease-in-out infinite}
-.t-keybind-reset{width:100%;padding:8px 12px;border-radius:10px;border:1px solid rgba(255,80,80,.2);background:rgba(255,80,80,.06);color:rgba(255,130,130,.9);cursor:pointer;font-size:12px;font-weight:700;margin-top:4px}
-.t-keybind-reset:hover{background:rgba(255,80,80,.12)}
-@keyframes t-pulse{0%,100%{opacity:1}50%{opacity:.6}}
-
-/* ── Color Customization rows ── */
-.t-color-custom-row{display:grid;grid-template-columns:90px 1fr auto;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04)}
-.t-color-custom-label{font-weight:700;font-size:11px;letter-spacing:.04em;opacity:.85}
-</style>
-
-
-
-<div id="tetris-online-panel" class="t-panel" role="region" aria-label="Online players"
-     style="width:220px; height:180px; right:12px; top:12px;">
-  <div class="hdr" data-drag-handle>
-    <div class="title">Online</div>
-    <div class="meta">Players: <span id="t-online-count">0</span></div>
-    <div class="btn" id="t-online-hide" title="Hide">✕</div>
-  </div>
-  <div class="body" style="padding:8px;">
-    <div id="t-online-list" aria-live="polite"></div>
-  </div>
-  <div class="t-resize-handle" aria-hidden="true"></div>
-</div>
-
-<div id="tetris-settings-panel" class="t-panel" role="region" aria-label="Settings customization"
-     style="width:320px; height:420px; right:12px; top:210px;">
-  <div class="hdr" data-drag-handle>
-    <div class="title">Settings</div>
-    <div class="meta" id="t-settings-subtitle">Customization</div>
-    <div class="btn" id="t-settings-hide" title="Hide">✕</div>
-  </div>
-  <div class="body t-settings-body" style="padding:10px;">
-
-    <!-- HOME PAGE: 3 nav buttons -->
-    <div class="t-settings-page" id="t-settings-page-home">
-      <button type="button" class="t-nav-btn" id="t-nav-keybinds">
-        <span class="t-nav-icon">⌨️</span>
-        <span class="t-nav-label">Settings</span>
-        <span class="t-nav-arrow">›</span>
-      </button>
-      <button type="button" class="t-nav-btn" id="t-nav-tetromino">
-        <span class="t-nav-icon">🎨</span>
-        <span class="t-nav-label">Tetromino Colors</span>
-        <span class="t-nav-arrow">›</span>
-      </button>
-      <button type="button" class="t-nav-btn" id="t-nav-color-custom">
-        <span class="t-nav-icon">🖌️</span>
-        <span class="t-nav-label">Color Customization</span>
-        <span class="t-nav-arrow">›</span>
-      </button>
-      <button type="button" class="t-nav-btn" id="t-nav-fun-custom">
-        <span class="t-nav-icon">✨</span>
-        <span class="t-nav-label">Fun Customization</span>
-        <span class="t-nav-arrow">›</span>
-      </button>
-    </div>
-
-    <!-- SETTINGS / KEYBINDS PAGE -->
-    <div class="t-settings-page" id="t-settings-page-keybinds" style="display:none;">
-      <button type="button" class="t-settings-back-btn" id="t-keybinds-back">← Back</button>
-      <div class="t-page-title">Key Bindings</div>
-      <div class="t-settings-list" id="t-keybinds-list"></div>
-    </div>
-
-    <!-- TETROMINO COLORS PAGE -->
-    <div class="t-settings-page" id="t-settings-page-colors" style="display:none;">
-      <button type="button" class="t-settings-back-btn" id="t-colors-back">← Back</button>
-      <button type="button" class="t-settings-open-presets" id="t-settings-open-presets">Presets</button>
-      <!-- Outline color row -->
-      <div class="t-color-custom-row" style="margin:0;">
-        <div class="t-color-custom-label">Outline</div>
-        <div class="t-setting-control"><input type="color" id="t-outline-color" value="#000000" /></div>
-        <div class="hex" id="t-outline-color-hex">#000000</div>
-      </div>
-      <div class="t-rgb-control" id="t-rgb-control" style="display:none;">
-        <div class="t-rgb-control-head">
-          <span>RGB speed</span>
-          <span class="t-rgb-speed-label" id="t-rgb-speed-label">140 ms</span>
-        </div>
-        <input type="range" class="t-rgb-speed" id="t-rgb-speed" min="60" max="1000" step="10" value="140" />
-        <label class="t-rgb-after-place-row" for="t-rgb-after-place">
-          <input type="checkbox" id="t-rgb-after-place" />
-          <span id="t-rgb-after-place-label">Enable RGB cycle after place</span>
-        </label>
-      </div>
-      <div class="t-settings-presets" id="t-settings-presets"></div>
-      <div class="t-settings-list" id="t-settings-list"></div>
-
-      <!-- CUSTOM CYCLE EDITOR (INLINE) -->
-      <div class="t-cycle-editor" id="t-settings-page-cycle-custom" style="display:none; margin-top:8px; flex-direction:column; gap:10px;">
-        <div class="t-page-title">Custom Cycle</div>
-
-        <div class="t-cycle-section">
-          <div class="t-cycle-section-title">Cycle Colors</div>
-          <div class="t-cycle-toolbar" style="margin-bottom:2px;">
-            <button type="button" class="t-mini-btn" id="t-cycle-add-color">Add Color</button>
-            <button type="button" class="t-mini-btn" id="t-cycle-reset-colors">Reset</button>
-            
-          </div>
-          <div class="t-cycle-list" id="t-cycle-list"></div>
-        </div>
-
-        <div class="t-cycle-section t-cycle-settings" id="t-cycle-control" style="display:flex;">
-          <div class="t-rgb-control-head">
-            <span>Cycle speed</span>
-            <span class="t-rgb-speed-label" id="t-cycle-speed-label">140 ms</span>
-          </div>
-          <input type="range" class="t-rgb-speed" id="t-cycle-speed" min="60" max="1000" step="10" value="140" />
-          <label class="t-rgb-after-place-row" for="t-cycle-after-place">
-            <input type="checkbox" id="t-cycle-after-place" />
-            <span id="t-cycle-after-place-label">Enable cycle after place</span>
-          </label>
-        </div>
-      </div>
-    </div>
-
-    <!-- TETROMINO PRESETS SUB-PAGE -->
-    <div class="t-settings-page" id="t-settings-page-presets" style="display:none;">
-      <div class="t-settings-topbar">
-        <button type="button" class="t-settings-back" id="t-settings-back">← Colors</button>
-        <button type="button" class="t-settings-save" id="t-settings-save">Save Current</button>
-      </div>
-      <div class="t-custom-presets" id="t-custom-presets"></div>
-    </div>
-    <!-- COLOR CUSTOMIZATION PAGE -->
-    <div class="t-settings-page" id="t-settings-page-color-custom" style="display:none;">
-      <button type="button" class="t-settings-back-btn" id="t-color-custom-back">← Back</button>
-      <div class="t-page-title">Color Customization</div><button type="button" class="t-mini-btn" id="t-color-reset-defaults">Default</button>
-      <div class="t-settings-list" style="gap:8px;">
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">HUD Panel</div>
-          <div class="t-setting-control"><input type="color" id="t-hud-color" value="#0000ff" /></div>
-          <div class="hex" id="t-hud-color-hex">#0000FF</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Your Name</div>
-          <div class="t-setting-control"><input type="color" id="t-name-color" value="#ffffff" /></div>
-          <div class="hex" id="t-name-color-hex">#FFFFFF</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Background</div>
-          <div class="t-setting-control"><input type="color" id="t-bg-color" value="#000000" /></div>
-          <div class="hex" id="t-bg-color-hex">#000000</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Grid Lines</div>
-          <div class="t-setting-control"><input type="color" id="t-grid-color" value="#444444" /></div>
-          <div class="hex" id="t-grid-color-hex">#444444</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- FUN CUSTOMIZATION PAGE -->
-    <div class="t-settings-page" id="t-settings-page-fun-custom" style="display:none;">
-      <button type="button" class="t-settings-back-btn" id="t-fun-custom-back">← Back</button>
-      <div class="t-page-title">Fun Customization</div><button type="button" class="t-mini-btn" id="t-fun-reset-defaults">Default</button>
-      <div class="t-settings-list" style="gap:8px;">
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Page BG</div>
-          <div class="t-setting-control"><input type="color" id="t-page-bg-color" value="#111111" /></div>
-          <div class="hex" id="t-page-bg-hex">#111111</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Online Dot</div>
-          <div class="t-setting-control"><input type="color" id="t-dot-on-color" value="#6ee7b7" /></div>
-          <div class="hex" id="t-dot-on-hex">#6EE7B7</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Offline Dot</div>
-          <div class="t-setting-control"><input type="color" id="t-dot-off-color" value="#666666" /></div>
-          <div class="hex" id="t-dot-off-hex">#666666</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Online Panel</div>
-          <div class="t-setting-control"><input type="color" id="t-online-panel-color" value="#06080a" /></div>
-          <div class="hex" id="t-online-panel-hex">#06080A</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Settings Panel</div>
-          <div class="t-setting-control"><input type="color" id="t-settings-panel-color" value="#06080a" /></div>
-          <div class="hex" id="t-settings-panel-hex">#06080A</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Tab Title</div>
-          <div class="t-setting-control"><input type="text" id="t-tab-title" class="t-text-input" value="Tetris" placeholder="Tetris" /></div>
-          <div class="hex" id="t-tab-title-hex">TITLE</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Favicon URL</div>
-          <div class="t-setting-control"><input type="text" id="t-favicon-url" class="t-text-input" value="https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4" placeholder="https://..." /></div>
-          <div class="hex" id="t-favicon-url-hex">ICON</div>
-        </div>
-      </div>
-    </div>
-
-  </div>
-  <div class="t-resize-handle" aria-hidden="true"></div>
-</div>
+  <div id="status">Loading Tetris…</div>
 
 <script>
-(function(){
-  if (!window.firebase || !firebase.database) { console.warn('firebase missing'); return; }
-  const dbRoot = db, onlineRoot = dbRoot.ref('onlineUsers'), CHAT_ROOT = dbRoot.ref('chat'),
-        MSGS_REF = CHAT_ROOT.child('messages'), TYPING_REF = CHAT_ROOT.child('typing');
+  const repoBase = 'https://cdn.jsdelivr.net/gh/codehskitkat/Tetris@3d7e648/';
+  const indexUrl = repoBase + 'index.html';
 
-  /* small helpers */
-  const $ = id => document.getElementById(id);
-  const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  const now = ()=>Date.now();
-  const uidFor = u => (typeof safeKey === 'function')? safeKey(u): encodeURIComponent(u||'');
-  const MIN_W=180,MIN_H=120,ACTIVE_MS=15000,MAX_IMG_BYTES=220*1024,MAX_MSG_LOAD=200;
-  const onlinePanel = $('tetris-online-panel'), chatPanel = $('tetris-chat-panel');
-
-  /* geometry persistence (unchanged) */
-  const saveGeom = (id,r)=>{ try{ localStorage.setItem('t_geom_'+id,JSON.stringify(r)); }catch(e){} };
-  const loadGeom = id => { try{ const v=localStorage.getItem('t_geom_'+id); return v?JSON.parse(v):null }catch(e){return null} };
-  const applyGeom = (panel,id)=>{ const g=loadGeom(id); if(!g) return; const s=panel.style; if(g.left!=null)s.left=g.left+'px'; if(g.top!=null)s.top=g.top+'px'; if(g.width)s.width=g.width+'px'; if(g.height)s.height=g.height+'px'; };
-
-
-  /* draggable + resizable (unchanged) */
-  function makeDraggableResizable(panel,id){
-    const hdr = panel.querySelector('[data-drag-handle]'), res = panel.querySelector('.t-resize-handle');
-    const clamp = (v,min,max)=>Math.max(min,Math.min(max,v));
-    const start = (e,move,end)=>{ e.preventDefault(); const rect=panel.getBoundingClientRect(); const sx=e.clientX, sy=e.clientY; const offX=sx-rect.left, offY=sy-rect.top;
-      function mm(ev){ ev.preventDefault(); move(ev,rect,offX,offY); }
-      function up(ev){ try{ document.removeEventListener('pointermove',mm); document.removeEventListener('pointerup',up);}catch(e){} end(); }
-      document.addEventListener('pointermove',mm); document.addEventListener('pointerup',up);
-    };
-    hdr?.addEventListener('pointerdown', e => start(e, (ev,rect,offX,offY)=>{ let left=ev.clientX-offX, top=ev.clientY-offY; left=clamp(left,8,window.innerWidth-rect.width-8); top=clamp(top,8,window.innerHeight-rect.height-8); panel.style.left=left+'px'; panel.style.top=top+'px'; panel.style.right='auto'; }, ()=>{ const r=panel.getBoundingClientRect(); saveGeom(id,{left:Math.round(r.left),top:Math.round(r.top),width:Math.round(r.width),height:Math.round(r.height)}); }));
-    res?.addEventListener('pointerdown', e => start(e, (ev,rect)=>{ let w=rect.width+(ev.clientX-e.clientX), h=rect.height+(ev.clientY-e.clientY); w=clamp(w,MIN_W,window.innerWidth-24); h=clamp(h,MIN_H,window.innerHeight-24); panel.style.width=w+'px'; panel.style.height=h+'px'; }, ()=>{ const r=panel.getBoundingClientRect(); saveGeom(id,{left:Math.round(r.left),top:Math.round(r.top),width:Math.round(r.width),height:Math.round(r.height)}); }));
-  }
-  if (onlinePanel) makeDraggableResizable(onlinePanel,'online');
-  if (chatPanel)  makeDraggableResizable(chatPanel,'chat');
-  const settingsPanel = $('tetris-settings-panel');
-  if (settingsPanel) { applyGeom(settingsPanel,'settings'); makeDraggableResizable(settingsPanel,'settings'); }
-
-  /* --- ONLINE PRESENCE & list (unchanged) --- */
-  const listEl = $('t-online-list'), countEl = $('t-online-count');
-  const players = {}; // key -> {root,dot,name,val}
-  function mkPlayerEl(key,val){
-    const root=document.createElement('div'); root.className='t-player'; root.dataset.key=key;
-    const dot=document.createElement('span'); dot.className='t-dot'; dot.setAttribute('aria-hidden','true');
-    const name=document.createElement('div'); name.textContent = val?.username||('#'+key); name.style.whiteSpace='nowrap'; name.style.overflow='hidden'; name.style.textOverflow='ellipsis'; name.style.maxWidth='150px';
-    root.appendChild(dot); root.appendChild(name);
-    return {root,dot,name,val};
-  }
-  function refreshCount(){ countEl.textContent=String(Object.keys(players).length); listEl.style.display = Object.keys(players).length ? 'block' : 'none'; }
-  function refreshPlayer(key){ const p=players[key]; if(!p) return; p.name.textContent = (p.val&&p.val.username) || key; const last = p.val?.lastActive||0; const active = last && (now()-last<=ACTIVE_MS); p.dot.classList.toggle('on',!!active); p.dot.classList.toggle('off',!active);
-    // Apply custom name color for local user
-    p.name.style.color = (key === myKey && window.__tetrisNameColor) ? window.__tetrisNameColor : '#fff';
-  }
-  window.__tetrisUpdateNameColors = function() { Object.keys(players).forEach(k => refreshPlayer(k)); };
-  onlineRoot.on('child_added', snap => { const k=snap.key, v=snap.val()||{}; if(players[k]) { players[k].val=v; refreshPlayer(k); return; } const el=mkPlayerEl(k,v); el.val=v; players[k]=el; listEl.appendChild(el.root); refreshCount(); refreshPlayer(k); });
-  onlineRoot.on('child_changed', snap => { const k=snap.key, v=snap.val()||{}; if(players[k]){ players[k].val=v; refreshPlayer(k); }});
-  onlineRoot.on('child_removed', snap => { const k=snap.key; if(players[k]) try{ players[k].root.remove(); }catch(e){} delete players[k]; refreshCount(); });
-  setInterval(()=>Object.keys(players).forEach(k=>refreshPlayer(k)),2000);
-
-  /* My presence management (unchanged) */
-  let myKey=null, myRef=null, presenceInterval=null, mySession=null;
-  async function startMyPresence(username){
-    if(!username) return;
-    try{
-      myKey = uidFor(username);
-      mySession = crypto.randomUUID ? crypto.randomUUID() : ('sess_'+Math.random().toString(36).slice(2,10));
-      myRef = onlineRoot.child(myKey);
-      await myRef.set({ username, lastActive: firebase.database.ServerValue.TIMESTAMP, session: mySession, meta: 'tetris-client' });
-      try{ myRef.onDisconnect().remove(); }catch(e){}
-      if(presenceInterval) clearInterval(presenceInterval);
-      presenceInterval = setInterval(()=>{ try{ myRef.update({ lastActive: firebase.database.ServerValue.TIMESTAMP, session: mySession }).catch(()=>{}); }catch(e){} },5000);
-    }catch(e){ console.warn('startMyPresence',e); }
-  }
-  async function stopMyPresence(){ try{ if(presenceInterval) clearInterval(presenceInterval); if(myRef){ await myRef.remove(); try{ myRef.onDisconnect().cancel(); }catch(e){} } }catch(e){ console.warn('stopMyPresence',e); } finally{ myKey=myRef=null; presenceInterval=null; } }
-
-  const origSignedIn = window.onSignedIn;
-  window.onSignedIn = function(...a){ try{ const user = (a && a[0]) ? a[0] : (CURRENT_USER?.username) || (typeof getLocalAuth==='function' && getLocalAuth()?.username); if(user) startMyPresence(user); }catch(e){} if(typeof origSignedIn==='function') try{ origSignedIn.apply(this,a); }catch(e){console.warn('onSignedIn wrapper',e)} };
-  try{ const cu = (CURRENT_USER && CURRENT_USER.username) ? CURRENT_USER.username : (typeof getLocalAuth === 'function' && getLocalAuth()?.username); if(cu) startMyPresence(cu); }catch(e){}
-  if(window.tetrisAuth?.signOut){ const orig=window.tetrisAuth.signOut; window.tetrisAuth.signOut = async function(...a){ try{ await stopMyPresence(); }catch(e){} return orig.apply(this,a); }; }
-  window.addEventListener('beforeunload', ()=>{ try{ if(myRef) myRef.remove(); }catch(e){} });
-
-  /* --- ENHANCED CHAT (password gated, bind UI, attach/detach) --- */
-  const CHAT_PASSWORD = 'CoconutCaleb27', SESSION_KEY='t_chat_unlocked_v1', BIND_KEY='t_chat_bind_v1';
-  const chatMessages = $('t-chat-messages'), chatInput = $('t-chat-input'), chatCount = $('t-chat-count'), chatFile = $('t-chat-file'), chatFileBtn = $('t-chat-filebtn'), chatSendBtn = $('t-chat-send'), chatTypingEl = $('t-chat-typing');
-  // initialize boolean from sessionStorage so unlocking persists in same tab
-  let chatUnlocked = false;
-  let observersInstalled=false, mutationObserver=null, handlers={added:null,removed:null,typing:null,changed:null}, bindState = JSON.parse(sessionStorage.getItem(BIND_KEY)||'null') || {mode:'Slash',key:'/'};
-
-  function createLockOverlay(){
-    if($('t-chat-lock-overlay')) return;
-    const ov = document.createElement('div'); ov.id='t-chat-lock-overlay';
-    ov.style.padding = '10px';
-    ov.style.marginTop = '50px';
-    ov.innerHTML = `<div id="t-chat-lock-inner">
-      <div style="font-weight:700;margin-bottom:6px">Enter chat password</div>
-      <input id="t-chat-password" type="password" placeholder="password" aria-label="chat password" style="width:100%;margin-bottom:8px"/>
-      <div style="display:flex;gap:8px;justify-content:center"><button id="t-chat-unlock">Unlock</button><button id="t-chat-unlock-cancel">Cancel</button></div>
-      <div style="font-size:12px;opacity:.8;margin-top:8px">Enter password to access Chat.</div>
-    </div>`;
-    chatPanel.appendChild(ov);
-    // event wiring
-    $('t-chat-unlock').addEventListener('click', ()=>{ const pw=$('t-chat-password').value||''; if(pw===CHAT_PASSWORD){ chatUnlocked=true; sessionStorage.setItem(SESSION_KEY,'1'); removeLockOverlay(); attachChatListeners(); } else alert('Incorrect password'); });
-    $('t-chat-unlock-cancel').addEventListener('click', ()=>{ $('t-chat-password').value=''; chatPanel.style.display='none'; });
-    // focus
-    setTimeout(()=>{ const pw=$('t-chat-password'); if(pw) pw.focus(); },50);
-  }
-  function removeLockOverlay(){ const el=$('t-chat-lock-overlay'); if(el) try{ el.remove(); }catch(e){} }
-
-  function createBindControls(){
-    if($('t-chat-bind-row')) return;
-    const hdr = chatPanel.querySelector('.hdr'); if(!hdr) return;
-    const row = document.createElement('div'); row.id='t-chat-bind-row'; row.innerHTML = `<select id="t-chat-bind-mode" title="Chat bind mode"><option>None</option><option>Slash</option><option>Enter</option><option>Custom</option></select><input id="t-chat-bind-key" maxlength="1" placeholder="K" style="width:32px;margin-left:6px"/>`;
-    hdr.appendChild(row);
-    const modeEl=$('t-chat-bind-mode'), keyEl=$('t-chat-bind-key');
-    modeEl.value = bindState.mode || 'Slash'; keyEl.value = bindState.key && bindState.mode==='Custom' ? bindState.key : '';
-    function saveBind(){ bindState.mode = modeEl.value; bindState.key = keyEl.value || bindState.key || '/'; sessionStorage.setItem(BIND_KEY,JSON.stringify(bindState)); }
-    modeEl.addEventListener('change', ()=>{ keyEl.style.display = modeEl.value==='Custom' ? 'inline-block' : 'none'; saveBind(); });
-    keyEl.addEventListener('input', ()=>{ if(keyEl.value.length>1) keyEl.value=keyEl.value.charAt(0); saveBind(); });
-    keyEl.style.display = modeEl.value==='Custom' ? 'inline-block' : 'none';
-  }
-
-  /* emoji utilities (NEW) */
-  const EMOJI_RECENTS_KEY = 't_recent_emojis';
-  // small set of emojis and categories; expand at will
-  const EMOJI_CATEGORIES = {
-    'clock': { title: 'Recent', emojis: [] },
-    'smileys': { title: 'Smileys', emojis: ['😀','😁','😂','🤣','🙂','😉','😍','😘','😎','🤔','😅','😭','😡','🤯','🤩','🤝','👍','👎','👏','🙌','🙏','🤞','💪','🎉'] },
-    'animals': { title: 'Animals', emojis: ['🐶','🐱','🐭','🐹','🐰','🦊','🐻','🐼','🐨','🐯','🦁','🐮','🐷','🐸','🐵','🦄'] },
-    'food': { title: 'Food', emojis: ['🍏','🍎','🍌','🍉','🍇','🍓','🍔','🍟','🍕','🌭','🍣','🍩','🍪','🍫'] },
-    'objects': { title: 'Objects', emojis: ['💡','🔔','📎','✂️','📷','💻','🔑','📱','🎧','⚙️','🔋','📅'] },
-    'symbols': { title: 'Symbols', emojis: ['❤️','💛','💚','💙','🖤','⭐','🔥','✨','⚡','☂️','✅','❌'] }
+  // ── Firebase config — REPLACE THESE VALUES ──────────────────────────────────
+  // 1. Go to https://console.firebase.google.com/
+  // 2. Create a project (e.g. "tetris-sync")
+  // 3. Add a Web App, copy the firebaseConfig object values below
+  // 4. Enable Firestore Database (Build → Firestore Database → Create database)
+  //    Choose "Start in test mode" initially, then set rules (see SETUP.md)
+  // ────────────────────────────────────────────────────────────────────────────
+  window.__FIREBASE_CONFIG__ = {
+    apiKey:            "PASTE_YOUR_API_KEY_HERE",
+    authDomain:        "PASTE_YOUR_AUTH_DOMAIN_HERE",
+    projectId:         "PASTE_YOUR_PROJECT_ID_HERE",
+    storageBucket:     "PASTE_YOUR_STORAGE_BUCKET_HERE",
+    messagingSenderId: "PASTE_YOUR_MESSAGING_SENDER_ID_HERE",
+    appId:             "PASTE_YOUR_APP_ID_HERE"
   };
 
-  function getRecentEmojis(){
-    try{
-      const raw = localStorage.getItem(EMOJI_RECENTS_KEY) || '[]';
-      const arr = JSON.parse(raw);
-      return Array.isArray(arr) ? arr : [];
-    }catch(e){ return []; }
-  }
-  function saveRecentEmoji(emoji){
-    try{
-      const arr = getRecentEmojis();
-      const idx = arr.indexOf(emoji);
-      if(idx !== -1) arr.splice(idx,1);
-      arr.unshift(emoji);
-      arr.splice(24); // keep a cap
-      localStorage.setItem(EMOJI_RECENTS_KEY, JSON.stringify(arr));
-    }catch(e){ console.warn('saveRecentEmoji failed', e); }
-  }
+  function forceTitle() { document.title = 'Tetris'; }
 
-  // encode emoji as firebase-safe key
-  function encEmojiKey(emoji){
-    try{
-      return encodeURIComponent(emoji).replace(/\./g,'%2E');
-    }catch(e){
-      return btoa(String(emoji)).replace(/\=/g,'');
-    }
-  }
-  function decEmojiKey(key){
-    try{ return decodeURIComponent(key); }catch(e){ try{ return atob(key); }catch(err){ return key; } }
-  }
-
-  // Renders reaction area (for one message) given reactions object
-  function renderReactionsContainer(msgKey, reactions){
-    const container = document.createElement('div');
-    container.className = 't-emoji-reactions';
-    if(!reactions) return container;
-    const username = (CURRENT_USER && CURRENT_USER.username) ? CURRENT_USER.username : (typeof getLocalAuth==='function' && getLocalAuth()?.username) || 'guest';
-    const userKey = uidFor(username);
-    Object.keys(reactions).forEach(enc => {
-      const usersObj = reactions[enc] || {};
-      const emoji = decEmojiKey(enc);
-      const count = Object.keys(usersObj).length;
-      if(count <= 0) return;
-      const own = !!usersObj[userKey];
-      const btn = document.createElement('button');
-      btn.className = 't-emoji-reaction' + (own ? ' own' : '');
-      btn.title = `${count} reacted`;
-      btn.innerHTML = `<span style="font-size:18px;line-height:1">${emoji}</span><span style="font-size:12px;opacity:.9">${count}</span>`;
-      btn.addEventListener('click', ev => { ev.stopPropagation(); toggleReaction(msgKey, emoji); });
-      container.appendChild(btn);
-    });
-    return container;
-  }
-
-  // toggle reaction via firebase transaction
-  async function toggleReaction(msgKey, emoji){
-    try{
-      if(!msgKey) return;
-      if(!chatUnlocked){ createLockOverlay(); alert('Unlock chat first'); return; }
-      const username = (CURRENT_USER && CURRENT_USER.username) ? CURRENT_USER.username : (typeof getLocalAuth==='function' && getLocalAuth()?.username) || 'guest';
-      const userKey = uidFor(username);
-      const enc = encEmojiKey(emoji);
-      const ref = MSGS_REF.child(msgKey).child('reactions').child(enc);
-      await ref.transaction(current => {
-        current = current || {};
-        if(current[userKey]) {
-          delete current[userKey];
-        } else {
-          current[userKey] = true;
-        }
-        if(Object.keys(current).length === 0) return null;
-        return current;
-      });
-      // update recents locally
-      saveRecentEmoji(emoji);
-    }catch(e){ console.warn('toggleReaction failed', e); }
-  }
-
-  // Create or update a message DOM element (modified to include reactions + react button)
-  function addChatMessageToDOM(k,msg){
-    if(!chatMessages || !msg || !chatUnlocked) return;
-    if(document.getElementById('msg_'+k)) return; // already present
-    const local = (CURRENT_USER?.username) || (typeof getLocalAuth==='function' && getLocalAuth()?.username);
-    const isOwn = msg.username && local && String(msg.username)===String(local);
-    const el = document.createElement('div'); el.id='msg_'+k; el.className='t-chat-msg '+(isOwn?'own':'other');
-    const meta = document.createElement('div'); meta.className='t-chat-meta';
-    const name = document.createElement('strong'); name.textContent = esc(msg.username||'anon');
-    const time = document.createElement('span'); time.style.marginLeft='6px'; time.style.opacity='.8'; time.textContent = ' • ' + new Date((msg.ts && typeof msg.ts==='number')?msg.ts:Date.now()).toLocaleTimeString();
-    meta.appendChild(name); meta.appendChild(time);
-
-    // delete button for own messages
-    if(isOwn){ const del=document.createElement('button'); del.className='t-msg-delete'; del.title='Delete message'; del.textContent='Delete'; del.addEventListener('click', async ev=>{ ev.stopPropagation(); if(!confirm('Delete this message?')) return; try{ await MSGS_REF.child(k).remove(); }catch(e){ console.warn('del failed',e); } }); meta.appendChild(del); }
-
-    // reaction area
-    const reactionWrap = document.createElement('div'); reactionWrap.style.display='flex'; reactionWrap.style.alignItems='center'; reactionWrap.style.gap='6px';
-
-    // react button to open picker anchored to this message
-    const reactBtn = document.createElement('button'); reactBtn.className='t-react-btn'; reactBtn.textContent='React';
-    reactBtn.addEventListener('click', ev => {
-      ev.stopPropagation();
-      if(!chatUnlocked){ createLockOverlay(); alert('Unlock chat first'); return; }
-      openEmojiPicker({ anchorEl: reactBtn, onPick: (emoji)=>{ toggleReaction(k, emoji); closeEmojiPicker(); }, preferCategory: 'clock' });
-    });
-    reactionWrap.appendChild(reactBtn);
-
-    meta.appendChild(reactionWrap);
-
-    const body = document.createElement('div'); body.className='t-chat-body';
-    if(msg.text) body.innerHTML = esc(msg.text).replace(/\n/g,'<br>');
-    if(msg.image){ const img=document.createElement('img'); img.className='t-chat-img'; img.src=msg.image; img.alt=(msg.username||'')+' image'; body.appendChild(img); }
-
-    el.appendChild(meta);
-    el.appendChild(body);
-
-    // render reactions (if any)
-    const reactionsNode = msg.reactions || null;
-    const reactionsContainer = renderReactionsContainer(k, reactionsNode);
-    if(reactionsContainer && reactionsContainer.children.length) el.appendChild(reactionsContainer);
-
-    chatMessages.appendChild(el);
-    chatMessages.scrollTop=chatMessages.scrollHeight;
-    while(chatMessages.children.length>500) chatMessages.removeChild(chatMessages.firstChild);
-  }
-
-  /* attach/detach DB listeners for messages & typing */
-  function attachChatListeners(){
-    if(observersInstalled) return; // already attached
-    if(!chatUnlocked){ createLockOverlay(); return; }
-    observersInstalled=true;
-    handlers.added = snap => { const k=snap.key, v=snap.val()||{}; if(v.ts && typeof v.ts==='object' && v.ts['.sv']) v.ts = Date.now(); addChatMessageToDOM(k,v); };
-    handlers.removed = snap => { const el=document.getElementById('msg_'+snap.key); if(el) try{ el.remove(); }catch(e){} };
-    // NEW: child_changed to reflect live reaction updates or edits
-    handlers.changed = snap => { const k=snap.key, v=snap.val()||{}; const el = document.getElementById('msg_'+k); if(!el) {
-        // if not currently present (maybe scrolled out) add it
-        addChatMessageToDOM(k,v); return;
-      }
-      // update body text / image if changed
-      const body = el.querySelector('.t-chat-body');
-      if(body){
-        body.innerHTML = '';
-        if(v.text) body.innerHTML = esc(v.text).replace(/\n/g,'<br>');
-        if(v.image){ const img=document.createElement('img'); img.className='t-chat-img'; img.src=v.image; img.alt=(v.username||'')+' image'; body.appendChild(img); }
-      }
-      // update reactions area
-      const oldReactions = el.querySelector('.t-emoji-reactions');
-      if(oldReactions) oldReactions.remove();
-      const newReactions = renderReactionsContainer(k, v.reactions || null);
-      if(newReactions && newReactions.children.length) el.appendChild(newReactions);
-    };
-    handlers.typing = snap => { const m = snap.val()||{}; const names = Object.keys(m).filter(k=>!!m[k]); if(!names.length){ if(chatTypingEl) chatTypingEl.textContent=''; return; } const display = names.map(k=>decodeURIComponent(k)).slice(0,3); chatTypingEl.textContent = display.length===1?`${display[0]} is typing…`:(display.length===2?`${display[0]} & ${display[1]} are typing…`:`${display.slice(0,2).join(' & ')} are typing…`); };
-    try{ MSGS_REF.limitToLast(MAX_MSG_LOAD).on('child_added',handlers.added); MSGS_REF.on('child_removed',handlers.removed); MSGS_REF.on('child_changed', handlers.changed); TYPING_REF.on('value',handlers.typing); }catch(e){ console.warn('attachChatListeners failed',e); }
-    if(!mutationObserver){ mutationObserver = new MutationObserver(()=>{ if(!document.body.contains(chatPanel)){ console.warn('chat panel removed — detaching listeners'); stopChatListeners(); } }); mutationObserver.observe(document.body,{childList:true,subtree:true}); }
-  }
-
-  // detach but DO NOT create lock overlay or clear session key (used on hide)
-  function stopChatListeners(){
-    if(!observersInstalled) return;
-    try{
-      if(handlers.added) MSGS_REF.off('child_added',handlers.added);
-      if(handlers.removed) MSGS_REF.off('child_removed',handlers.removed);
-      if(handlers.changed) MSGS_REF.off('child_changed',handlers.changed);
-      if(handlers.typing) TYPING_REF.off('value',handlers.typing);
-    }catch(e){ console.warn('stopChatListeners error',e); }
-    observersInstalled=false;
-    handlers={added:null,removed:null,typing:null,changed:null};
-    if(chatMessages) chatMessages.innerHTML='';
-    if(chatTypingEl) chatTypingEl.textContent='';
-    try{ if(mutationObserver){ mutationObserver.disconnect(); mutationObserver=null; } }catch(e){}
-  }
-
-  // original detach which fully locks chat
-  function detachChatListeners(){
-    if(!observersInstalled) return;
-    try{ if(handlers.added) MSGS_REF.off('child_added',handlers.added); if(handlers.removed) MSGS_REF.off('child_removed',handlers.removed); if(handlers.changed) MSGS_REF.off('child_changed',handlers.changed); if(handlers.typing) TYPING_REF.off('value',handlers.typing); }catch(e){ console.warn('detach error',e); }
-    handlers={added:null,removed:null,typing:null,changed:null}; if(chatMessages) chatMessages.innerHTML=''; if(chatTypingEl) chatTypingEl.textContent=''; sessionStorage.removeItem(SESSION_KEY); chatUnlocked=false; createLockOverlay();
-    try{ if(mutationObserver){ mutationObserver.disconnect(); mutationObserver=null; } }catch(e){}
-  }
-
-  // Paste this inside the same IIFE (where MSGS_REF, chatInput, chatUnlocked, createLockOverlay exist)
-  async function sendMessage(text, image){
-    try{
-      if (!chatUnlocked) { createLockOverlay(); alert('Unlock chat first'); return; }
-      const txt = String(text || '').slice(0,500);
-      if (!txt && !image) { return; } // nothing to send
-
-      const username = (CURRENT_USER && CURRENT_USER.username) ? CURRENT_USER.username : (typeof getLocalAuth==='function' && getLocalAuth()?.username) || 'guest';
-      const payload = {
-        username,
-        ts: firebase.database.ServerValue.TIMESTAMP
-      };
-      if (txt) payload.text = txt;
-      if (image) payload.image = image;
-
-      // push the message
-      await MSGS_REF.push(payload);
-
-      // reset UI
-      if (chatInput) { chatInput.value = ''; chatCount.textContent = '0/500'; }
-      setTyping(false);
-    }catch(err){
-      console.error('sendMessage failed', err);
-      alert('Failed to send message: ' + (err && err.message));
-    }
-  }
-  // expose globally (optional)
-  window.sendMessage = sendMessage;
-
-
-  /* chat focus blocking */
-  function onChatFocus(){ window.chatFocused=true; try{ tetrisChat?.setTyping?.(true); }catch(e){} }
-  function onChatBlur(){ window.chatFocused=false; try{ tetrisChat?.setTyping?.(false); }catch(e){} }
-  chatInput?.addEventListener('focus', onChatFocus); chatInput?.addEventListener('blur', onChatBlur);
-
-  /* Send & file wiring (respect lock) */
-  $('t-chat-filebtn')?.addEventListener('click', ev=>{ if(!chatUnlocked){ ev.preventDefault(); alert('Unlock chat first'); createLockOverlay(); return; } chatFile?.click(); });
-
-  // NEW: Emoji button next to file attach opens picker for inserting into input
-  const emojiBtn = $('t-chat-emoji-btn');
-  emojiBtn?.addEventListener('click', ev=>{
-    ev.stopPropagation();
-    if(!chatUnlocked){ createLockOverlay(); alert('Unlock chat first'); return; }
-    openEmojiPicker({ anchorEl: emojiBtn, onPick: (emoji)=>{ insertEmojiAtCaret(chatInput, emoji); saveRecentEmoji(emoji); closeEmojiPicker(); }, preferCategory: 'clock' });
-  });
-
-  chatSendBtn?.addEventListener('click', ev=>{ if(!chatUnlocked){ ev.preventDefault(); alert('Unlock chat first'); createLockOverlay(); return; } if(typeof sendMessage==='function') sendMessage(chatInput.value, null); else chatSendBtn.closest('form')?.submit?.(); });
-
-  /* global key bind */
-  function globalKeyHandler(ev){
-    const active=document.activeElement;
-    if(active && (active.tagName==='INPUT' || active.tagName==='TEXTAREA' || active.isContentEditable)) return;
-    const mode = bindState.mode || 'Slash'; let bindKey = bindState.key || '/';
-    if(mode==='Slash') bindKey='/'; else if(mode==='Enter') bindKey='Enter';
-    if(mode==='None') return;
-    if((bindKey==='Enter' && ev.key==='Enter') || (bindKey.length===1 && ev.key===bindKey) || (bindKey==='/' && ev.key==='/')){
-      ev.preventDefault();
-      if(!chatUnlocked){ createLockOverlay(); const pw=$('t-chat-password'); if(pw) pw.focus(); return; }
-      chatInput?.focus();
-    }
-  }
-  document.addEventListener('keydown', globalKeyHandler, {capture:true});
-
-  /* clear button */
-  $('t-chat-clear')?.addEventListener('click', ()=>{ if(chatMessages) chatMessages.innerHTML=''; });
-
-  /* image processing helper (unchanged) */
-  function imageFileToDataURL(file, maxWidth=800, quality=0.72){
-    return new Promise((resolve,reject)=>{
-      try{
-        const r=new FileReader();
-        r.onerror = e => reject(e);
-        r.onload = ()=>{
-          const img=new Image();
-          img.onerror = e => reject(e);
-          img.onload = ()=>{
-            const scale = Math.min(1, maxWidth / img.width);
-            const w = Math.round(img.width * scale), h = Math.round(img.height * scale);
-            const c=document.createElement('canvas'); c.width=w; c.height=h; const ctx=c.getContext('2d'); ctx.drawImage(img,0,0,w,h);
-            function hasAlpha(){
-              try{
-                const total=w*h, max=1000, step=Math.max(1,Math.floor(Math.sqrt(total/max)));
-                const data=ctx.getImageData(0,0,w,h).data;
-                for(let y=0;y<h;y+=step) for(let x=0;x<w;x+=step){ const idx=(y*w+x)*4; if(data[idx+3]!==255) return true; }
-                return false;
-              }catch(err){ return file && file.type==='image/png'; }
-            }
-            const needsAlpha = hasAlpha();
-            resolve(needsAlpha?c.toDataURL('image/png'):c.toDataURL('image/jpeg',quality));
-          };
-          img.src = r.result;
-        };
-        r.readAsDataURL(file);
-      }catch(e){ reject(e); }
+  function loadScript(src) {
+    return new Promise((resolve, reject) => {
+      const s = document.createElement('script');
+      s.src = src;
+      s.async = false;
+      s.onload = resolve;
+      s.onerror = () => reject(new Error('Failed: ' + src));
+      document.head.appendChild(s);
     });
   }
 
-  /* file handling */
-  chatFile?.addEventListener('change', async ev=>{
-    if(!chatUnlocked){ chatFile.value=''; alert('Unlock chat first'); createLockOverlay(); return; }
-    const f = chatFile.files && chatFile.files[0]; if(!f) return; if(!f.type.startsWith('image/')){ alert('Only images allowed'); chatFile.value=''; return; }
-    try{
-      let dataURL = await imageFileToDataURL(f,800,0.72);
-      let bytes = Math.round((dataURL.length*3)/4);
-      if(bytes > MAX_IMG_BYTES){
-        const smaller = await imageFileToDataURL(f,600,0.6);
-        const b2 = Math.round((smaller.length*3)/4);
-        if(b2 > MAX_IMG_BYTES){ if(!confirm('Image is still large and may fail to store. Continue?')) { chatFile.value=''; return; } }
-        if(typeof sendMessage==='function') await sendMessage(chatInput.value, smaller);
-      } else { if(typeof sendMessage==='function') await sendMessage(chatInput.value, dataURL); }
-    }catch(e){ console.warn('image processing failed',e); alert('Image processing failed. Try a smaller image.'); }
-    finally{ chatFile.value=''; }
-  });
-
-  /* typing indicator */
-  let typingTimer=null;
-  function setTyping(state){
-    try{
-      const username = (CURRENT_USER && CURRENT_USER.username) ? CURRENT_USER.username : (typeof getLocalAuth==='function' && getLocalAuth()?.username) || 'guest';
-      const key = uidFor(username);
-      if(!key) return;
-      const TR = TYPING_REF;
-      if(state){
-        TR.child(key).set(true);
-        if(typingTimer) clearTimeout(typingTimer);
-        typingTimer = setTimeout(()=>{ TR.child(key).set(false); typingTimer=null; },2000);
-      } else {
-        TR.child(key).set(false);
-        if(typingTimer) { clearTimeout(typingTimer); typingTimer=null; }
-      }
-    }catch(e){ console.warn('setTyping failed',e); }
-  }
-
-  /* tie typing to input */
-  chatInput?.addEventListener('input', e=>{ chatCount.textContent = `${e.target.value.length}/500`; setTyping(true); });
-  chatInput?.addEventListener('keydown', e=>{ if(e.key==='Enter' && (e.ctrlKey||e.metaKey)) return; if(e.key==='Enter' && !e.shiftKey){ e.preventDefault(); chatSendBtn?.click(); } });
-
-  /* --- new: stopChatListeners defined above --- */
-
-  /* attach/detach init */
-  function init(){ if(!chatUnlocked){ createLockOverlay(); if(chatMessages) chatMessages.innerHTML=''; } else { removeLockOverlay(); attachChatListeners(); } }
-  init();
-
-  // hookup the 'X' close button to hide chat + remove clear button + stop listeners
-  const chatCloseBtn = $('t-chat-close');
-  chatCloseBtn?.addEventListener('click', ()=>{
-    try{
-      const clearBtn = $('t-chat-clear');
-      if(clearBtn) clearBtn.remove();
-      // stop fetching messages/typing
-      stopChatListeners();
-      // hide panel
-      if(chatPanel) chatPanel.style.display = 'none';
-    }catch(e){ console.warn('chat close failed',e); }
-  });
-
-  window.tetrisChatEnhance = { attachChatListeners, detachChatListeners, stopChatListeners, isUnlocked: ()=>chatUnlocked, setTyping };
-
-  window.addEventListener('beforeunload', ()=>{ try{ setTyping(false); }catch(e){} });
-
-  /* --- SPACE-FIX: ensure inputs accept actual spaces when game captures space globally --- */
-  (function(){
-    function insertSpaceAtCaret(target){
-      try{
-        if(!target||target.readOnly||target.disabled) return;
-        const start = typeof target.selectionStart==='number' ? target.selectionStart : target.value.length;
-        const end = typeof target.selectionEnd==='number' ? target.selectionEnd : start;
-        const val = target.value || '';
-        const newVal = val.slice(0,start) + ' ' + val.slice(end);
-        target.value = newVal;
-        const pos = start + 1;
-        target.selectionStart = target.selectionEnd = pos;
-        target.dispatchEvent(new Event('input',{bubbles:true}));
-      }catch(e){ console.warn('insertSpaceAtCaret error',e); }
-    }
-    function attachSpaceFix(el){
-      if(!el) return;
-      el.addEventListener('keydown', function(ev){
-        if(ev.key===' '||ev.code==='Space'){ try{ insertSpaceAtCaret(ev.target); }catch(e){} try{ ev.stopImmediatePropagation(); }catch(e){} try{ ev.preventDefault(); }catch(e){} }
-      }, {capture:true,passive:false});
-      el.addEventListener('focus', ()=>{
-        function docCap(ev){ if(ev.key===' '||ev.code==='Space'){ try{ ev.stopImmediatePropagation(); }catch(e){} } }
-        document.addEventListener('keydown', docCap, {capture:true,passive:false});
-        el.addEventListener('blur', ()=>{ document.removeEventListener('keydown', docCap, {capture:true}); }, {once:true});
-      });
-    }
-    function runWhenReady(){
-      attachSpaceFix(document.getElementById('tetris-username'));
-      attachSpaceFix($('t-chat-input'));
-      document.addEventListener('focusin', e=>{ const t=e.target; if(!t) return; if(t.tagName==='INPUT'||t.tagName==='TEXTAREA'||t.isContentEditable) attachSpaceFix(t); });
-    }
-    if(document.readyState==='complete'||document.readyState==='interactive') runWhenReady(); else document.addEventListener('DOMContentLoaded', runWhenReady);
-  })();
-
-  /* ----------------- EMOJI PICKER UI (NEW) ----------------- */
-  let emojiPickerEl = null;
-  function closeEmojiPicker(){
-    try{ if(emojiPickerEl){ emojiPickerEl.remove(); emojiPickerEl=null; } }catch(e){}
-  }
-  function positionPicker(anchorEl, pickerEl){
-    if(!anchorEl || !pickerEl) return;
-    const rect = anchorEl.getBoundingClientRect();
-    // try place below anchor; if not enough space, place above
-    const topBelow = rect.bottom + 8;
-    const above = rect.top - pickerEl.offsetHeight - 8;
-    let top = topBelow;
-    if(top + pickerEl.offsetHeight > window.innerHeight - 8) {
-      top = Math.max(8, above);
-    }
-    let left = rect.left;
-    if(left + pickerEl.offsetWidth > window.innerWidth - 8) {
-      left = window.innerWidth - pickerEl.offsetWidth - 8;
-    }
-    pickerEl.style.left = Math.round(left) + 'px';
-    pickerEl.style.top = Math.round(top) + 'px';
-  }
-
-  // insert emoji into input at caret
-  function insertEmojiAtCaret(inputEl, emoji){
-    try{
-      if(!inputEl) return;
-      const start = typeof inputEl.selectionStart === 'number' ? inputEl.selectionStart : inputEl.value.length;
-      const end = typeof inputEl.selectionEnd === 'number' ? inputEl.selectionEnd : start;
-      const val = inputEl.value || '';
-      inputEl.value = val.slice(0,start) + emoji + val.slice(end);
-      const caret = start + emoji.length;
-      inputEl.selectionStart = inputEl.selectionEnd = caret;
-      inputEl.focus();
-      inputEl.dispatchEvent(new Event('input',{bubbles:true}));
-    }catch(e){ console.warn('insertEmojiAtCaret', e); }
-  }
-
-  function openEmojiPicker({ anchorEl=null, onPick=null, preferCategory='clock' } = {}){
-    closeEmojiPicker();
-    emojiPickerEl = document.createElement('div');
-    emojiPickerEl.className = 't-emoji-picker';
-    emojiPickerEl.setAttribute('role','dialog');
-    // tabs
-    const tabs = document.createElement('div'); tabs.className='t-emoji-tabs';
-    const categories = Object.keys(EMOJI_CATEGORIES);
-    categories.forEach(cat => {
-      const btn = document.createElement('button');
-      btn.className = 't-emoji-tab';
-      btn.textContent = EMOJI_CATEGORIES[cat].title || cat;
-      btn.addEventListener('click', ()=> {
-        buildGrid(cat);
-      });
-      tabs.appendChild(btn);
+  function runInlineScript(code) {
+    return new Promise((resolve) => {
+      const s = document.createElement('script');
+      s.textContent = code;
+      document.head.appendChild(s);
+      resolve();
     });
-    emojiPickerEl.appendChild(tabs);
-    const grid = document.createElement('div'); grid.className = 't-emoji-grid';
-    emojiPickerEl.appendChild(grid);
-
-    document.body.appendChild(emojiPickerEl);
-    // build grid for initial category (prefer recent/clock)
-    function buildGrid(cat){
-      grid.innerHTML = '';
-      let emojis = [];
-      if(cat === 'clock'){
-        emojis = getRecentEmojis();
-        if(!emojis || emojis.length===0) {
-          // fall back to smileys if none
-          emojis = EMOJI_CATEGORIES['smileys'].emojis.slice(0,24);
-        }
-      } else {
-        emojis = (EMOJI_CATEGORIES[cat] && EMOJI_CATEGORIES[cat].emojis) ? EMOJI_CATEGORIES[cat].emojis : [];
-      }
-      emojis.forEach(emo => {
-        const c = document.createElement('div');
-        c.className = 't-emoji-cell';
-        c.textContent = emo;
-        c.title = emo;
-        c.addEventListener('click', ev => {
-          ev.stopPropagation();
-          try{ if(typeof onPick === 'function') onPick(emo); }catch(e){ console.warn('emoji onPick error',e); }
-          saveRecentEmoji(emo);
-        });
-        grid.appendChild(c);
-      });
-    }
-
-    // initial tab pick
-    if(preferCategory && categories.includes(preferCategory)) buildGrid(preferCategory);
-    else buildGrid(categories[0]);
-
-    // position near anchor
-    setTimeout(()=>{ positionPicker(anchorEl || emojiBtn, emojiPickerEl); },20);
-
-    // close on outside click or ESC
-    function onDocClick(ev){
-      if(!emojiPickerEl) return;
-      if(ev.target && emojiPickerEl.contains(ev.target)) return;
-      closeEmojiPicker();
-      document.removeEventListener('pointerdown', onDocClick, true);
-      document.removeEventListener('keydown', onEsc, true);
-    }
-    function onEsc(ev){
-      if(ev.key === 'Escape'){ closeEmojiPicker(); document.removeEventListener('pointerdown', onDocClick, true); document.removeEventListener('keydown', onEsc, true); }
-    }
-    document.addEventListener('pointerdown', onDocClick, true);
-    document.addEventListener('keydown', onEsc, true);
   }
 
-  // close when window resizes to avoid floating leftovers
-  window.addEventListener('resize', ()=>closeEmojiPicker());
+  async function injectCloudSync() {
+    // Inline the cloud-sync code so it works as a single file
+    // (The full cloud-sync.js content is embedded below)
+    const CLOUD_SYNC_CODE = `
+(function () {
+  'use strict';
 
-  /* ----------------- END EMOJI PICKER UI ----------------- */
+  const FIREBASE_CONFIG = window.__FIREBASE_CONFIG__ || {};
 
-})();
-</script>
-
-<script>
-(function(){
-  const panel = document.getElementById('tetris-settings-panel');
-  if (!panel) return;
-
-  const STORAGE_KEY = 'tetris_tetromino_colors';
-  const RGB_AFTER_PLACE_STORAGE_KEY = 'tetris_rgb_after_place_cycle';
-  const CYCLE_COLORS_STORAGE_KEY = 'tetris_custom_cycle_colors_v1';
-  const CYCLE_SPEED_STORAGE_KEY = 'tetris_custom_cycle_ms_v1';
-  const CYCLE_AFTER_PLACE_STORAGE_KEY = 'tetris_custom_cycle_after_place_v1';
-  const CUSTOM_PRESET_KEY = 'tetris_custom_color_presets_v1';
-  const KEYBIND_STORAGE_KEY = 'tetris_keybinds_v1';
-  const COLOR_CUSTOM_STORAGE_KEY = 'tetris_color_custom_v1';
-
-  function escPreset(s){
-    return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  }
-  const PIECES = ['I','O','T','J','L','S','Z'];
-  const BUILTIN_PRESETS = [
-    ['default', 'Default'],
-    ['neon', 'Neon'],
-    ['rgb', 'RGB'],
-    ['custom-cycle', 'Custom Cycle']
+  const SETTINGS_KEYS = [
+    'tetris_tetromino_colors',
+    'tetris_rgb_cycle_ms',
+    'tetris_rgb_after_place_cycle',
+    'tetris_custom_cycle_v1',
+    'tetris_custom_color_presets_v1',
+    'tetris_keybinds_v1',
+    'tetris_opts_v1',
+    'tetris_color_custom_v1',
+    'tetris_fun_custom_v1',
   ];
-  const MAX_CUSTOM_PRESETS = 5;
 
-  // ── Page elements ──
-  const pageHomeEl     = $('t-settings-page-home');
-  const pageKeybindsEl = $('t-settings-page-keybinds');
-  const pageColorsEl   = $('t-settings-page-colors');
-  const pagePresetsEl  = $('t-settings-page-presets');
-  const pageColorCustomEl = $('t-settings-page-color-custom');
+  const SYNC_USER_KEY = 'tetris_sync_user';
+  const SYNC_ETAG_KEY = 'tetris_sync_etag';
+  let db = null;
+  let currentUser = null;
+  let syncDebounce = null;
+  let isSyncing = false;
 
-  const openPresetsBtn = $('t-settings-open-presets');
-  const backBtn        = $('t-settings-back');
-  const saveBtn        = $('t-settings-save');
-  const presetsEl      = $('t-settings-presets');
-  const listEl         = $('t-settings-list');
-  const customPresetsEl = $('t-custom-presets');
-  const hideBtn        = $('t-settings-hide');
-  const rgbControl     = $('t-rgb-control');
-  const rgbSlider      = $('t-rgb-speed');
-  const rgbSpeedLabel  = $('t-rgb-speed-label');
-  const rgbAfterPlaceToggle = $('t-rgb-after-place');
-  const rgbAfterPlaceLabel  = $('t-rgb-after-place-label');
-  const subtitleEl     = $('t-settings-subtitle');
-
-  let currentColors = null;
-  let view = 'home';
-
-  function safeColors(input){
-    const fallback = Array.isArray(window.__tetrominoDefaultColors)
-      ? window.__tetrominoDefaultColors.slice()
-      : ['#5ac8fa','#ffcc00','#af52de','#007aff','#ff9500','#34c759','#ff3b30'];
-    if (!Array.isArray(input)) return fallback;
-    return fallback.map((d, i) => (typeof input[i] === 'string' && input[i].trim()) ? input[i].trim() : d);
+  async function sha256(str) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
   }
 
-  function getColors(){
+  function gatherLocalSettings() {
+    const out = {};
+    SETTINGS_KEYS.forEach(k => { const v = localStorage.getItem(k); if (v !== null) out[k] = v; });
+    return out;
+  }
+
+  function applySettingsLocally(settings) {
+    if (!settings) return;
+    const _orig = localStorage.setItem.bind(localStorage);
+    SETTINGS_KEYS.forEach(k => { if (k in settings) _orig(k, settings[k]); });
+  }
+
+  function userDocRef(username) {
+    return db.collection('tetris_users').doc(username.toLowerCase());
+  }
+
+  async function cloudGet(username) {
+    const snap = await userDocRef(username).get();
+    return snap.exists ? snap.data() : null;
+  }
+
+  async function cloudSet(username, data) {
+    await userDocRef(username).set(data, { merge: true });
+  }
+
+  async function signup(username, password) {
+    username = username.trim().toLowerCase();
+    if (!username || username.length < 3) throw new Error('Username must be at least 3 characters.');
+    if (!password || password.length < 6) throw new Error('Password must be at least 6 characters.');
+    if (!/^[a-z0-9_-]+$/.test(username)) throw new Error('Username can only contain letters, numbers, _ and -');
+    const existing = await cloudGet(username);
+    if (existing && existing.passwordHash) throw new Error('Username already taken.');
+    const passwordHash = await sha256(username + ':' + password);
+    const settings = gatherLocalSettings();
+    await cloudSet(username, { passwordHash, settings, updatedAt: Date.now() });
+    currentUser = { username, passwordHash };
+    localStorage.setItem(SYNC_USER_KEY, JSON.stringify(currentUser));
+    localStorage.setItem(SYNC_ETAG_KEY, String(Date.now()));
+    return currentUser;
+  }
+
+  async function login(username, password) {
+    username = username.trim().toLowerCase();
+    const data = await cloudGet(username);
+    if (!data || !data.passwordHash) throw new Error('Account not found.');
+    const passwordHash = await sha256(username + ':' + password);
+    if (passwordHash !== data.passwordHash) throw new Error('Wrong password.');
+    currentUser = { username, passwordHash };
+    localStorage.setItem(SYNC_USER_KEY, JSON.stringify(currentUser));
+    if (data.settings) {
+      applySettingsLocally(data.settings);
+      localStorage.setItem(SYNC_ETAG_KEY, String(data.updatedAt || 0));
+    }
+    return { user: currentUser, settings: data.settings };
+  }
+
+  function logout() {
+    currentUser = null;
+    localStorage.removeItem(SYNC_USER_KEY);
+    localStorage.removeItem(SYNC_ETAG_KEY);
+  }
+
+  function setStatus(code) {
+    const dot = document.getElementById('tcs-dot');
+    const lbl = document.getElementById('tcs-label');
+    if (!dot) return;
+    dot.className = 'tcs-dot-inner ' + code;
+    const labels = { 'logged-out':'Cloud Sync', synced:'Synced ✓', syncing:'Syncing…', error:'Sync Error' };
+    if (lbl) lbl.textContent = labels[code] || 'Cloud Sync';
+  }
+
+  async function pushSettings() {
+    if (!currentUser || !db || isSyncing) return;
+    isSyncing = true;
+    setStatus('syncing');
     try {
-      const current = typeof window.__getTetrominoColors === 'function'
-        ? window.__getTetrominoColors()
-        : JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-      return safeColors(current || window.__tetrominoColors);
+      const settings = gatherLocalSettings();
+      await cloudSet(currentUser.username, { settings, updatedAt: Date.now() });
+      localStorage.setItem(SYNC_ETAG_KEY, String(Date.now()));
+      setStatus('synced');
     } catch (e) {
-      return safeColors(window.__tetrominoColors);
+      setStatus('error');
+    } finally {
+      isSyncing = false;
     }
   }
 
-  function getCycleColors(){
-    try {
-      const raw = typeof window.__getTetrominoCycleColors === 'function'
-        ? window.__getTetrominoCycleColors()
-        : JSON.parse(localStorage.getItem(CYCLE_COLORS_STORAGE_KEY) || 'null');
-      if (!Array.isArray(raw) || raw.length === 0) return ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8000ff', '#ff1493'];
-      return raw.map(v => (typeof v === 'string' && v.trim()) ? v.trim() : '#ffffff').filter(Boolean);
-    } catch (e) {
-      return ['#ff0000', '#ff7f00', '#ffff00', '#00ff00', '#0000ff', '#8000ff', '#ff1493'];
-    }
+  function debouncedPush() {
+    clearTimeout(syncDebounce);
+    syncDebounce = setTimeout(pushSettings, 1500);
   }
 
-  function persistColors(colors, applyToGame = true, opts = {}) {
-    const safe = safeColors(colors);
-    currentColors = safe.slice();
-    if (typeof window.__setTetrominoColors === 'function') {
-      window.__setTetrominoColors(safe, {
-        silent: !applyToGame,
-        mode: typeof opts.mode === 'string' ? opts.mode : (opts.rgbMode ? 'rgb' : 'static')
-      });
-    } else {
-      try { localStorage.setItem(STORAGE_KEY, JSON.stringify(safe)); } catch (e) {}
-    }
-    updatePresetButtons();
-    updateCustomPresetButtons();
-  }
-
-  function detectActivePreset(colors){
-    const presets = window.__tetrominoPresets || {};
-    const mode = window.__tetrominoMode || 'static';
-    if (mode === 'rgb') return 'rgb';
-    if (mode === 'custom') return 'custom-cycle';
-    const rgbColors = safeColors(window.__tetrominoRgbColors || presets.rgb || []);
-    if (rgbColors.length && JSON.stringify(rgbColors) === JSON.stringify(safeColors(colors))) return 'rgb';
-    for (const [name, preset] of Object.entries(presets)) {
-      if (name === 'rgb' || name === 'custom-cycle') continue;
-      if (JSON.stringify(safeColors(preset)) === JSON.stringify(safeColors(colors))) return name;
-    }
-    return '';
-  }
-
-
-  function getDefaultCycleColors(){
-    const presets = window.__tetrominoPresets || {};
-    return safeColors(
-      Array.isArray(window.__tetrominoDefaultColors) && window.__tetrominoDefaultColors.length
-        ? window.__tetrominoDefaultColors
-        : (Array.isArray(presets.default) && presets.default.length ? presets.default : ['#5ac8fa','#ffcc00','#af52de','#007aff','#ff9500','#34c759','#ff3b30'])
-    );
-  }
-
-  function getStoredCycleColors(){
-    try {
-      const raw = JSON.parse(localStorage.getItem(CYCLE_COLORS_STORAGE_KEY) || 'null');
-      if (Array.isArray(raw) && raw.length) return raw;
-    } catch (e) {}
-    try {
-      const win = window.__tetrominoCycleColors;
-      if (Array.isArray(win) && win.length) return win.slice();
-    } catch (e) {}
-    return getDefaultCycleColors();
-  }
-
-  function normalizeCycleColors(input){
-    if (!Array.isArray(input)) return getDefaultCycleColors();
-    const clean = input
-      .map(v => (typeof v === 'string' ? v.trim() : ''))
-      .filter(v => /^#([0-9a-fA-F]{6})$/.test(v));
-    return clean.length ? clean : getDefaultCycleColors();
-  }
-
-  function getStoredCycleMode(){
-    try { return localStorage.getItem('tetris_tetromino_mode') || 'static'; } catch (e) { return 'static'; }
-  }
-
-  function getCustomPresetList(){
-    try {
-      const raw = JSON.parse(localStorage.getItem(CUSTOM_PRESET_KEY) || 'null');
-      const list = Array.isArray(raw) ? raw.slice(0, MAX_CUSTOM_PRESETS) : [];
-      while (list.length < MAX_CUSTOM_PRESETS) list.push(null);
-      return list.map(slot => {
-        if (!slot || typeof slot !== 'object') return null;
-        const name = typeof slot.name === 'string' && slot.name.trim() ? slot.name.trim() : 'Untitled preset';
-        const colors = safeColors(slot.colors);
-        return { name, colors };
-      });
-    } catch (e) {
-      return Array.from({ length: MAX_CUSTOM_PRESETS }, () => null);
-    }
-  }
-
-  function saveCustomPresetList(list){
-    const normalized = Array.isArray(list) ? list.slice(0, MAX_CUSTOM_PRESETS) : [];
-    while (normalized.length < MAX_CUSTOM_PRESETS) normalized.push(null);
-    try { localStorage.setItem(CUSTOM_PRESET_KEY, JSON.stringify(normalized)); } catch (e) {}
-  }
-
-  function activeCustomPresetIndex(colors){
-    const list = getCustomPresetList();
-    const target = JSON.stringify(safeColors(colors));
-    return list.findIndex(slot => slot && JSON.stringify(safeColors(slot.colors)) === target);
-  }
-
-  function promptPresetName(defaultName){
-    const name = window.prompt('Preset name:', defaultName || 'My Preset');
-    if (name === null) return null;
-    const trimmed = String(name).trim();
-    return trimmed || null;
-  }
-
-  function isRgbActive(){
-    return window.__tetrominoMode === 'rgb' || detectActivePreset(currentColors || getColors()) === 'rgb';
-  }
-
-  function isCustomCycleActive(){
-    return window.__tetrominoMode === 'custom';
-  }
-
-  function getRgbAfterPlaceEnabled() {
-    try {
-      const raw = localStorage.getItem(RGB_AFTER_PLACE_STORAGE_KEY);
-      return raw === '1' || raw === 'true';
-    } catch (e) {
-      return false;
-    }
-  }
-
-  function setRgbAfterPlaceEnabled(enabled) {
-    const value = !!enabled;
-    try { localStorage.setItem(RGB_AFTER_PLACE_STORAGE_KEY, value ? '1' : '0'); } catch (e) {}
-    if (typeof window.__setTetrominoRgbAfterPlace === 'function') {
-      window.__setTetrominoRgbAfterPlace(value);
-    }
-    syncRgbUi();
-  }
-
-  function syncRgbUi(){
-    const mode = window.__tetrominoMode || 'static';
-    const cycleOn = mode === 'custom';
-    const rgbOn = mode === 'rgb';
-    if (rgbControl) rgbControl.style.display = rgbOn ? 'flex' : 'none';
-    if (listEl) listEl.style.display = cycleOn ? 'none' : 'flex';
-    if ($('t-cycle-control')) $('t-cycle-control').style.display = cycleOn ? 'flex' : 'none';
-    const speed = Math.max(60, Math.min(1000, Number(window.__getTetrominoRgbSpeed ? window.__getTetrominoRgbSpeed() : window.__tetrominoRgbSpeed || 140) || 140));
-    if (rgbSlider) rgbSlider.value = String(speed);
-    if (rgbSpeedLabel) rgbSpeedLabel.textContent = `${speed} ms`;
-    if ($('t-cycle-speed')) $('t-cycle-speed').value = String(speed);
-    if ($('t-cycle-speed-label')) $('t-cycle-speed-label').textContent = `${speed} ms`;
-    if (panel) panel.style.setProperty('--rgb-speed', `${speed}ms`);
-
-    const afterPlace = getRgbAfterPlaceEnabled();
-    if (rgbAfterPlaceToggle) rgbAfterPlaceToggle.checked = afterPlace;
-    if ($('t-cycle-after-place')) $('t-cycle-after-place').checked = afterPlace;
-    if (rgbAfterPlaceLabel) rgbAfterPlaceLabel.textContent = 'Enable RGB cycle after place';
-    if ($('t-cycle-after-place-label')) $('t-cycle-after-place-label').textContent = 'Enable cycle after place';
-
-    if (listEl) {
-      [...listEl.querySelectorAll('.t-setting-row')].forEach(row => row.classList.toggle('cycle-mode', rgbOn));
-    }
-    if (presetsEl) {
-      [...presetsEl.querySelectorAll('.t-settings-preset')].forEach(btn => btn.classList.toggle('rgb-mode', rgbOn && btn.dataset.preset === 'rgb'));
-    }
-    updateCycleEditorVisibility();
-  }
-
-  function updateCycleEditorVisibility() {
-    const editor = $('t-settings-page-cycle-custom');
-    if (!editor) return;
-    const visible = (window.__tetrominoMode || 'static') === 'custom';
-    editor.style.display = visible ? 'flex' : 'none';
-  }
-
-  function showView(which){
-    view = which;
-    const PAGES = ['home','keybinds','colors','presets','color-custom','fun-custom'];
-    PAGES.forEach(p => {
-      const el = $(`t-settings-page-${p}`);
-      if (el) el.style.display = 'none';
-    });
-    const target = $(`t-settings-page-${which}`);
-    if (target) target.style.display = 'flex';
-
-    const subtitles = { home:'Customization', keybinds:'Settings', colors:'Tetromino Colors', presets:'Presets', 'color-custom':'Color Customization', 'fun-custom':'Fun Customization' };
-    if (subtitleEl) subtitleEl.textContent = subtitles[which] || '';
-
-    if (which === 'colors') { renderRows(); renderBuiltinPresets(); updateCycleEditorVisibility(); }
-    else if (which === 'presets') renderCustomPresets();
-    else if (which === 'keybinds') renderKeybinds();
-    else if (which === 'color-custom') renderColorCustom();
-    else if (which === 'fun-custom') renderFunCustom();
-  }
-
-  function updatePresetButtons(){
-    if (!presetsEl) return;
-    const activeName = detectActivePreset(currentColors || getColors());
-    [...presetsEl.querySelectorAll('.t-settings-preset')].forEach(btn => {
-      const active = btn.dataset.preset === activeName || (activeName === 'custom-cycle' && btn.dataset.preset === 'custom-cycle');
-      btn.classList.toggle('active', active);
+  function watchLocalStorage() {
+    const _orig = localStorage.setItem.bind(localStorage);
+    localStorage.setItem = function (key, value) {
+      _orig(key, value);
+      if (SETTINGS_KEYS.includes(key) && currentUser) debouncedPush();
+    };
+    window.addEventListener('storage', e => {
+      if (SETTINGS_KEYS.includes(e.key) && currentUser) debouncedPush();
     });
   }
 
-  function updateCustomPresetButtons(){
-    if (!customPresetsEl) return;
-    const activeIndex = activeCustomPresetIndex(currentColors || getColors());
-    [...customPresetsEl.querySelectorAll('.t-custom-preset-main')].forEach((btn, idx) => {
-      btn.classList.toggle('active', idx === activeIndex);
+  const CSS = \`
+    #tcs-panel { position:fixed; bottom:44px; left:10px; z-index:99999; font-family:Inter,system-ui,Arial,sans-serif; font-size:12px; color:#e2e8f0; user-select:none; }
+    #tcs-bubble { display:flex; align-items:center; gap:6px; padding:6px 11px; border-radius:20px; background:rgba(6,8,12,.85); border:1px solid rgba(255,255,255,.09); backdrop-filter:blur(8px); cursor:pointer; transition:background 150ms; white-space:nowrap; }
+    #tcs-bubble:hover { background:rgba(14,18,26,.95); }
+    .tcs-dot-inner { width:8px; height:8px; border-radius:50%; flex-shrink:0; transition:background 300ms; }
+    .tcs-dot-inner.logged-out { background:#64748b; }
+    .tcs-dot-inner.synced { background:#4ade80; box-shadow:0 0 6px rgba(74,222,128,.5); }
+    .tcs-dot-inner.syncing { background:#fbbf24; animation:tcs-pulse 700ms ease-in-out infinite; }
+    .tcs-dot-inner.error { background:#f87171; }
+    @keyframes tcs-pulse { 0%,100%{opacity:1} 50%{opacity:.35} }
+    #tcs-drawer { position:absolute; bottom:calc(100% + 8px); left:0; width:278px; background:rgba(7,9,15,.97); border:1px solid rgba(255,255,255,.08); border-radius:14px; backdrop-filter:blur(12px); box-shadow:0 16px 48px rgba(0,0,0,.75); overflow:hidden; display:none; flex-direction:column; }
+    #tcs-drawer.open { display:flex; }
+    .tcs-head { padding:12px 14px 10px; font-weight:700; font-size:13px; border-bottom:1px solid rgba(255,255,255,.05); display:flex; align-items:center; justify-content:space-between; }
+    .tcs-close { cursor:pointer; opacity:.45; font-size:15px; padding:2px 5px; border-radius:4px; }
+    .tcs-close:hover { opacity:1; background:rgba(255,255,255,.08); }
+    .tcs-tabs { display:flex; gap:4px; padding:10px 14px 0; }
+    .tcs-tab { flex:1; padding:7px; border:none; border-bottom:2px solid transparent; border-radius:8px 8px 0 0; background:rgba(255,255,255,.04); color:rgba(255,255,255,.45); cursor:pointer; font-size:12px; font-weight:700; }
+    .tcs-tab.active { background:rgba(125,211,252,.1); color:#7dd3fc; border-bottom-color:#7dd3fc; }
+    .tcs-body { padding:12px 14px; display:flex; flex-direction:column; gap:9px; }
+    .tcs-field { display:flex; flex-direction:column; gap:4px; }
+    .tcs-label { font-size:10px; font-weight:700; opacity:.5; letter-spacing:.06em; text-transform:uppercase; }
+    .tcs-input { padding:8px 10px; border-radius:8px; border:1px solid rgba(255,255,255,.1); background:rgba(255,255,255,.05); color:#fff; font-size:13px; width:100%; box-sizing:border-box; outline:none; font-family:inherit; }
+    .tcs-input:focus { border-color:rgba(125,211,252,.4); }
+    .tcs-btn { width:100%; padding:9px; border-radius:9px; border:none; background:rgba(125,211,252,.14); color:#7dd3fc; font-size:13px; font-weight:700; cursor:pointer; transition:background 150ms; font-family:inherit; }
+    .tcs-btn:hover { background:rgba(125,211,252,.24); }
+    .tcs-btn:disabled { opacity:.4; cursor:default; }
+    .tcs-btn.danger { background:rgba(248,113,113,.1); color:#f87171; }
+    .tcs-btn.danger:hover { background:rgba(248,113,113,.2); }
+    .tcs-btn.secondary { background:rgba(255,255,255,.06); color:rgba(255,255,255,.7); }
+    .tcs-btn.secondary:hover { background:rgba(255,255,255,.1); }
+    .tcs-msg { font-size:11px; min-height:15px; }
+    .tcs-msg.err { color:#f87171; }
+    .tcs-msg.ok  { color:#4ade80; }
+    .tcs-user-row { display:flex; align-items:center; gap:10px; padding:9px 11px; border-radius:10px; background:rgba(74,222,128,.06); border:1px solid rgba(74,222,128,.13); }
+    .tcs-avatar { width:32px; height:32px; border-radius:50%; background:linear-gradient(135deg,#7dd3fc,#4ade80); display:flex; align-items:center; justify-content:center; font-weight:800; font-size:14px; color:#000; flex-shrink:0; }
+    .tcs-uname { font-weight:700; font-size:13px; }
+    .tcs-sub { font-size:10px; opacity:.5; margin-top:1px; }
+    .tcs-divider { height:1px; background:rgba(255,255,255,.05); }
+    .tcs-hint { font-size:10px; text-align:center; opacity:.4; line-height:1.5; }
+  \`;
+
+  let drawerOpen = false;
+  let currentTab = 'login';
+
+  function buildUI() {
+    const style = document.createElement('style');
+    style.textContent = CSS;
+    document.head.appendChild(style);
+
+    const panel = document.createElement('div');
+    panel.id = 'tcs-panel';
+    panel.innerHTML = \`
+      <div id="tcs-drawer"><div class="tcs-head"><span>☁ Cloud Sync</span><span class="tcs-close" id="tcs-close">✕</span></div><div id="tcs-inner"></div></div>
+      <div id="tcs-bubble"><div id="tcs-dot"><div class="tcs-dot-inner logged-out"></div></div><span id="tcs-label">Cloud Sync</span></div>
+    \`;
+    document.body.appendChild(panel);
+
+    document.getElementById('tcs-bubble').addEventListener('click', () => {
+      drawerOpen = !drawerOpen;
+      document.getElementById('tcs-drawer').classList.toggle('open', drawerOpen);
+      if (drawerOpen) renderInner();
+    });
+    document.getElementById('tcs-close').addEventListener('click', () => {
+      drawerOpen = false;
+      document.getElementById('tcs-drawer').classList.remove('open');
     });
   }
 
-  function renderBuiltinPresets(){
-    if (!presetsEl) return;
-    presetsEl.innerHTML = '';
-    BUILTIN_PRESETS.forEach(([key, label]) => {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 't-settings-preset';
-      btn.dataset.preset = key;
-      btn.innerHTML = `<span class="t-settings-preset-chip" aria-hidden="true"></span><span>${escPreset(label)}</span>`;
-      btn.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (key === 'custom-cycle') {
-          setCycleMode('custom');
-          saveCycleColors(getCycleColors(), true);
-          updateCycleEditorVisibility();
-          renderCycleCustom();
-          showView('colors');
-          return;
+  function renderInner() {
+    const inner = document.getElementById('tcs-inner');
+    if (!inner) return;
+    currentUser ? renderLoggedIn(inner) : renderAuth(inner);
+  }
+
+  function renderLoggedIn(inner) {
+    const lastSync = localStorage.getItem(SYNC_ETAG_KEY);
+    const lsStr = lastSync ? new Date(Number(lastSync)).toLocaleTimeString() : 'Never';
+    const av = currentUser.username[0].toUpperCase();
+    inner.innerHTML = \`
+      <div class="tcs-body">
+        <div class="tcs-user-row">
+          <div class="tcs-avatar">\${av}</div>
+          <div><div class="tcs-uname">\${currentUser.username}</div><div class="tcs-sub">Last sync: \${lsStr}</div></div>
+        </div>
+        <div class="tcs-divider"></div>
+        <button class="tcs-btn" id="tcs-push">⬆&nbsp; Push settings to cloud</button>
+        <button class="tcs-btn secondary" id="tcs-pull">⬇&nbsp; Pull settings from cloud</button>
+        <div class="tcs-msg" id="tcs-amsg"></div>
+        <div class="tcs-hint">Settings auto-sync when you change them</div>
+        <div class="tcs-divider"></div>
+        <button class="tcs-btn danger" id="tcs-logout">Log out</button>
+      </div>
+    \`;
+    const msg = () => document.getElementById('tcs-amsg');
+
+    document.getElementById('tcs-push').addEventListener('click', async () => {
+      msg().className = 'tcs-msg'; msg().textContent = 'Saving…';
+      try { await pushSettings(); msg().className='tcs-msg ok'; msg().textContent='✓ Saved to cloud!'; renderInner(); }
+      catch(e) { msg().className='tcs-msg err'; msg().textContent=e.message; }
+    });
+
+    document.getElementById('tcs-pull').addEventListener('click', async () => {
+      msg().className='tcs-msg'; msg().textContent='Loading…';
+      try {
+        const data = await cloudGet(currentUser.username);
+        if (data && data.settings) {
+          applySettingsLocally(data.settings);
+          localStorage.setItem(SYNC_ETAG_KEY, String(data.updatedAt || Date.now()));
+          msg().className='tcs-msg ok'; msg().textContent='✓ Loaded! Reload the page to apply.';
+        } else { msg().className='tcs-msg err'; msg().textContent='No cloud settings found.'; }
+      } catch(e) { msg().className='tcs-msg err'; msg().textContent=e.message; }
+    });
+
+    document.getElementById('tcs-logout').addEventListener('click', () => {
+      logout(); setStatus('logged-out'); renderInner();
+    });
+  }
+
+  function renderAuth(inner) {
+    inner.innerHTML = \`
+      <div class="tcs-tabs">
+        <button class="tcs-tab \${currentTab==='login'?'active':''}" id="tcs-tlogin">Log In</button>
+        <button class="tcs-tab \${currentTab==='signup'?'active':''}" id="tcs-tsignup">Sign Up</button>
+      </div>
+      <div class="tcs-body">
+        <div class="tcs-field"><div class="tcs-label">Username</div><input class="tcs-input" id="tcs-un" type="text" placeholder="your_username" autocomplete="off" spellcheck="false" /></div>
+        <div class="tcs-field"><div class="tcs-label">Password</div><input class="tcs-input" id="tcs-pw" type="password" placeholder="••••••••" autocomplete="off" /></div>
+        \${currentTab==='signup' ? '<div class="tcs-field"><div class="tcs-label">Confirm Password</div><input class="tcs-input" id="tcs-pw2" type="password" placeholder="••••••••" autocomplete="off" /></div>' : ''}
+        <div class="tcs-msg" id="tcs-amsg"></div>
+        <button class="tcs-btn" id="tcs-auth-go">\${currentTab==='login'?'Log In':'Create Account'}</button>
+        <div class="tcs-hint">\${currentTab==='signup'?'Your current settings will be saved to your new account.':'Logging in pulls your cloud settings to this device.'}</div>
+      </div>
+    \`;
+
+    document.getElementById('tcs-tlogin').addEventListener('click', () => { currentTab='login'; renderInner(); });
+    document.getElementById('tcs-tsignup').addEventListener('click', () => { currentTab='signup'; renderInner(); });
+
+    const un = document.getElementById('tcs-un');
+    const pw = document.getElementById('tcs-pw');
+    const pw2 = document.getElementById('tcs-pw2');
+    const amsg = document.getElementById('tcs-amsg');
+    const goBtn = document.getElementById('tcs-auth-go');
+
+    [un, pw, pw2].filter(Boolean).forEach(el => {
+      el.addEventListener('keydown', e => e.stopPropagation());
+      el.addEventListener('click',   e => e.stopPropagation());
+      el.addEventListener('pointerdown', e => e.stopPropagation());
+    });
+
+    async function doAuth() {
+      const username = (un.value || '').trim();
+      const password = pw.value || '';
+      amsg.className='tcs-msg'; amsg.textContent = currentTab==='login' ? 'Logging in…' : 'Creating account…';
+      goBtn.disabled = true;
+      try {
+        if (currentTab === 'signup') {
+          const p2 = pw2 ? pw2.value : '';
+          if (password !== p2) throw new Error('Passwords do not match.');
+          await signup(username, password);
+          amsg.className='tcs-msg ok'; amsg.textContent='✓ Account created!';
+          setStatus('synced');
+        } else {
+          await login(username, password);
+          amsg.className='tcs-msg ok'; amsg.textContent='✓ Logged in! Reload to fully apply cloud settings.';
+          setStatus('synced');
         }
-        const preset = (window.__tetrominoPresets && window.__tetrominoPresets[key]) ? window.__tetrominoPresets[key] : null;
-        if (preset) {
-          currentColors = safeColors(preset);
-          persistColors(currentColors, true, { mode: key === 'rgb' ? 'rgb' : 'static' });
-          renderRows();
-        }
-      });
-      presetsEl.appendChild(btn);
-    });
-    updatePresetButtons();
-    syncRgbUi();
+        setTimeout(() => renderInner(), 1000);
+      } catch(e) {
+        amsg.className='tcs-msg err'; amsg.textContent = e.message || String(e);
+        goBtn.disabled = false;
+      }
+    }
+
+    goBtn.addEventListener('click', doAuth);
+    pw.addEventListener('keydown', e => { if (e.key==='Enter') { e.stopPropagation(); doAuth(); }});
+    if (pw2) pw2.addEventListener('keydown', e => { if (e.key==='Enter') { e.stopPropagation(); doAuth(); }});
   }
 
-  function renderRows(){
-    if (!listEl) return;
-    currentColors = getColors();
-    listEl.innerHTML = '';
-
-    const rgbOn = isRgbActive();
-    const customOn = isCustomCycleActive();
-
-    if (rgbOn) {
-      const speed = Math.max(60, Math.min(1000, Number(window.__getTetrominoRgbSpeed ? window.__getTetrominoRgbSpeed() : window.__tetrominoRgbSpeed || 140) || 140));
-      const preview = document.createElement('div');
-      preview.className = 't-rgb-preview-card';
-
-      const title = document.createElement('div');
-      title.className = 't-rgb-preview-title';
-      title.textContent = 'RGB Preview';
-
-      const barWrap = document.createElement('div');
-      barWrap.className = 't-rgb-preview-bar-wrap';
-
-      const bar = document.createElement('div');
-      bar.className = 't-rgb-preview-bar';
-      bar.style.setProperty('--rgb-speed', `${speed}ms`);
-
-      const meta = document.createElement('div');
-      meta.className = 't-rgb-preview-meta';
-      meta.textContent = `${speed} ms`;
-
-      barWrap.appendChild(bar);
-      preview.appendChild(title);
-      preview.appendChild(barWrap);
-      preview.appendChild(meta);
-      listEl.appendChild(preview);
-
-      updatePresetButtons();
-      syncRgbUi();
+  async function init() {
+    if (!FIREBASE_CONFIG.apiKey || FIREBASE_CONFIG.apiKey.includes('PASTE')) {
+      console.warn('[CloudSync] Firebase not configured — cloud sync disabled.');
       return;
     }
+    const load = src => new Promise((res,rej) => { const s=document.createElement('script'); s.src=src; s.onload=res; s.onerror=rej; document.head.appendChild(s); });
+    await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js');
+    await load('https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js');
 
-    const displayColors = customOn ? getCycleColors() : currentColors.slice();
+    if (!firebase.apps.length) firebase.initializeApp(FIREBASE_CONFIG);
+    db = firebase.firestore();
 
-    PIECES.forEach((piece, idx) => {
-      const row = document.createElement('div');
-      row.className = 't-setting-row';
-      row.classList.toggle('cycle-mode', customOn);
-
-      const label = document.createElement('div');
-      label.className = 'piece';
-      label.textContent = piece;
-
-      const control = document.createElement('div');
-      control.className = 't-setting-control';
-
-      const input = document.createElement('input');
-      input.type = 'color';
-      input.value = displayColors[idx] || '#ffffff';
-
-      const hex = document.createElement('div');
-      hex.className = 'hex';
-      hex.textContent = (displayColors[idx] || '').toUpperCase();
-
-      const commitColor = () => {
-        if (customOn) {
-          const next = getCycleColors();
-          next[idx] = input.value;
-          hex.textContent = input.value.toUpperCase();
-          saveCycleColors(next, true);
-          return;
-        }
-        currentColors[idx] = input.value;
-        hex.textContent = input.value.toUpperCase();
-        persistColors(currentColors, true, { mode: 'static' });
-      };
-
-      input.addEventListener('pointerdown', e => e.stopPropagation());
-      input.addEventListener('click', e => e.stopPropagation());
-      input.addEventListener('input', commitColor);
-      input.addEventListener('change', commitColor);
-
-      control.appendChild(input);
-
-      row.appendChild(label);
-      row.appendChild(control);
-      row.appendChild(hex);
-      listEl.appendChild(row);
-    });
-
-    updatePresetButtons();
-    syncRgbUi();
-  }
-  function saveToSlot(index){
-    const list = getCustomPresetList();
-    const name = promptPresetName(list[index] && list[index].name ? list[index].name : `Preset ${index + 1}`);
-    if (!name) return;
-    list[index] = { name, colors: getColors() };
-    saveCustomPresetList(list);
-    renderCustomPresets();
-  }
-
-  function loadCustomPreset(index){
-    const list = getCustomPresetList();
-    const slot = list[index];
-    if (!slot) return;
-    currentColors = safeColors(slot.colors);
-    persistColors(currentColors, true, { mode: 'static' });
-    renderRows();
-    renderCustomPresets();
-  }
-
-  function renameCustomPreset(index){
-    const list = getCustomPresetList();
-    const slot = list[index];
-    if (!slot) return;
-    const name = promptPresetName(slot.name);
-    if (!name) return;
-    slot.name = name;
-    list[index] = slot;
-    saveCustomPresetList(list);
-    renderCustomPresets();
-  }
-
-  function deleteCustomPreset(index){
-    const list = getCustomPresetList();
-    const slot = list[index];
-    if (!slot) return;
-    if (!window.confirm(`Delete preset "${slot.name}"?`)) return;
-    list[index] = null;
-    saveCustomPresetList(list);
-    renderCustomPresets();
-  }
-
-  function renderCustomPresets(){
-    if (!customPresetsEl) return;
-    const list = getCustomPresetList();
-    customPresetsEl.innerHTML = '';
-
-    list.forEach((slot, idx) => {
-      const card = document.createElement('div');
-      card.className = 't-custom-preset';
-
-      const main = document.createElement('button');
-      main.type = 'button';
-      main.className = 't-custom-preset-main';
-
-      const actions = document.createElement('div');
-      actions.className = 't-custom-preset-actions';
-
-      if (slot) {
-        main.innerHTML = `<div class="t-custom-preset-name">${escPreset(slot.name)}</div><div class="t-custom-preset-desc">Click to use this preset</div>`;
-        main.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          loadCustomPreset(idx);
-        });
-
-        const rename = document.createElement('button');
-        rename.type = 'button';
-        rename.className = 't-mini-btn';
-        rename.textContent = 'Rename';
-        rename.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          renameCustomPreset(idx);
-        });
-
-        const del = document.createElement('button');
-        del.type = 'button';
-        del.className = 't-mini-btn';
-        del.textContent = 'Delete';
-        del.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          deleteCustomPreset(idx);
-        });
-
-        actions.appendChild(rename);
-        actions.appendChild(del);
-      } else {
-        main.innerHTML = `<div class="t-custom-preset-name">Empty slot ${idx + 1}</div><div class="t-custom-preset-desc">Save the current colors here</div>`;
-        main.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          saveToSlot(idx);
-        });
-
-        const save = document.createElement('button');
-        save.type = 'button';
-        save.className = 't-mini-btn';
-        save.textContent = 'Save';
-        save.addEventListener('click', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          saveToSlot(idx);
-        });
-
-        actions.appendChild(save);
-      }
-
-      card.appendChild(main);
-      card.appendChild(actions);
-      customPresetsEl.appendChild(card);
-    });
-
-    updateCustomPresetButtons();
-  }
-
-
-  function getCycleSpeed() {
-    const speed = Number(window.__getTetrominoRgbSpeed ? window.__getTetrominoRgbSpeed() : 140);
-    return Math.max(60, Math.min(1000, Number.isFinite(speed) ? speed : 140));
-  }
-
-  function setCycleMode(mode){
-    if (typeof window.__setTetrominoCycleMode === 'function') {
-      window.__setTetrominoCycleMode(mode);
-    } else if (typeof window.__setTetrominoMode === 'function') {
-      window.__setTetrominoMode(mode);
-    }
-    syncRgbUi();
-  }
-
-  function renderCycleCustom() {
-    const listEl = $('t-cycle-list');
-    if (!listEl) return;
-    const colors = getCycleColors();
-    const canRemove = colors.length > 1;
-    listEl.innerHTML = '';
-    colors.forEach((color, idx) => {
-      const row = document.createElement('div');
-      row.className = 't-cycle-row';
-
-      const label = document.createElement('div');
-      label.className = 't-color-custom-label';
-      label.textContent = `Color ${idx + 1}`;
-
-      const control = document.createElement('div');
-      control.className = 't-setting-control';
-
-      const input = document.createElement('input');
-      input.type = 'color';
-      input.value = color;
-
-      const hex = document.createElement('div');
-      hex.className = 'hex';
-      hex.textContent = String(color || '').toUpperCase();
-
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.className = 't-cycle-remove';
-      remove.textContent = 'Remove';
-      remove.disabled = !canRemove;
-      remove.title = canRemove ? 'Remove this color' : 'At least one color is required';
-
-      const commit = () => {
-        const next = getCycleColors();
-        next[idx] = input.value;
-        saveCycleColors(next, true);
-      };
-
-      input.addEventListener('pointerdown', e => e.stopPropagation());
-      input.addEventListener('click', e => e.stopPropagation());
-      input.addEventListener('input', () => {
-        hex.textContent = input.value.toUpperCase();
-        commit();
-      });
-      input.addEventListener('change', commit);
-      remove.addEventListener('click', (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-        if (!canRemove) return;
-        const next = getCycleColors();
-        if (next.length <= 1) return;
-        next.splice(idx, 1);
-        saveCycleColors(next, true);
-      });
-
-      control.appendChild(input);
-      row.appendChild(label);
-      row.appendChild(control);
-      row.appendChild(hex);
-      row.appendChild(remove);
-      listEl.appendChild(row);
-    });
-
-    syncRgbUi();
-  }
-
-  function saveCycleColors(colors, applyNow = true) {
-    const next = normalizeCycleColors(colors);
-    try { localStorage.setItem(CYCLE_COLORS_STORAGE_KEY, JSON.stringify(next)); } catch (e) {}
-    if (typeof window.__setTetrominoCycleColors === 'function') {
-      window.__setTetrominoCycleColors(next);
-    }
-    if (applyNow) {
-      setCycleMode('custom');
-      if (typeof window.__setTetrominoCycleColors === 'function') window.__setTetrominoCycleColors(next);
-    }
-    syncRgbUi();
-    if (view === 'colors') { renderCycleCustom(); updateCycleEditorVisibility(); }
-    if (view === 'colors') renderRows();
-  }
-
-  // ──────────────────────────────────────────
-  // ── KEYBINDS ──────────────────────────────
-  // ──────────────────────────────────────────
-  const KEYBIND_DEFS = [
-    { action: 'moveLeft',  label: 'Move Left',  default: 'ArrowLeft' },
-    { action: 'moveRight', label: 'Move Right', default: 'ArrowRight' },
-    { action: 'softDrop',  label: 'Soft Drop',  default: 'ArrowDown' },
-    { action: 'rotateCW',  label: 'Rotate CW',  default: 'ArrowUp' },
-    { action: 'rotateCCW', label: 'Rotate CCW', default: 'x' },
-    { action: 'hardDrop',  label: 'Hard Drop',  default: ' ' },
-    { action: 'hold',      label: 'Hold',       default: 'c' },
-    { action: 'pause',     label: 'Pause',      default: 'p' },
-    { action: 'restart',   label: 'Restart',    default: 'r' },
-  ];
-
-  function getKeybinds() {
     try {
-      const raw = JSON.parse(localStorage.getItem(KEYBIND_STORAGE_KEY) || '{}');
-      const result = {};
-      KEYBIND_DEFS.forEach(d => {
-        result[d.action] = (raw[d.action] && typeof raw[d.action] === 'string') ? raw[d.action] : d.default;
-      });
-      return result;
-    } catch (e) {
-      const result = {};
-      KEYBIND_DEFS.forEach(d => { result[d.action] = d.default; });
-      return result;
-    }
+      const saved = JSON.parse(localStorage.getItem(SYNC_USER_KEY) || 'null');
+      if (saved && saved.username && saved.passwordHash) { currentUser = saved; setStatus('synced'); }
+    } catch(e) {}
+
+    buildUI();
+    watchLocalStorage();
+
+    if (currentUser) setTimeout(debouncedPush, 4000);
   }
 
-  function saveKeybinds(binds) {
-    try { localStorage.setItem(KEYBIND_STORAGE_KEY, JSON.stringify(binds)); } catch (e) {}
-    window.__tetrisKeybinds = binds;
-    updateHintBar(binds);
-  }
+  if (document.readyState === 'complete') { init().catch(console.error); }
+  else { window.addEventListener('load', () => init().catch(console.error)); }
 
-  function updateHintBar(binds) {
-    const hintEl = $('t-hint-bar');
-    if (!hintEl) return;
-    const b = binds || getKeybinds();
-    const k = (action) => displayKey(b[action]);
-    hintEl.textContent =
-      `${k('moveLeft')}/${k('moveRight')} move • ${k('rotateCW')}/${k('rotateCCW')} rotate • ${k('hardDrop')} hard drop • ${k('pause')} pause • ${k('restart')} restart`;
-  }
-
-  function displayKey(key) {
-    if (!key) return '?';
-    if (key === ' ')          return 'Space';
-    if (key === 'ArrowLeft')  return '← Left';
-    if (key === 'ArrowRight') return '→ Right';
-    if (key === 'ArrowUp')    return '↑ Up';
-    if (key === 'ArrowDown')  return '↓ Down';
-    return key.length === 1 ? key.toUpperCase() : key;
-  }
-
-  let listeningFor = null;
-
-  // ──────────────────────────────────────────
-  // ── OPTIMIZATION FLAGS ────────────────────
-  // ──────────────────────────────────────────
-  const OPT_STORAGE_KEY = 'tetris_opts_v1';
-  const OPT_DEFS = [
-    { key: 'particles',    label: 'Line-clear particles',   default: true },
-    { key: 'flash',        label: 'Screen flash on clear',  default: true },
-    { key: 'rowGlow',      label: 'Row glow effect',        default: true },
-    { key: 'floatingScore',label: 'Floating score text',    default: true },
-    { key: 'ghost',        label: 'Ghost piece',            default: true },
-  ];
-
-  function getOpts() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(OPT_STORAGE_KEY) || '{}');
-      const result = {};
-      OPT_DEFS.forEach(d => { result[d.key] = (d.key in raw) ? !!raw[d.key] : d.default; });
-      return result;
-    } catch (e) {
-      const result = {}; OPT_DEFS.forEach(d => { result[d.key] = d.default; }); return result;
-    }
-  }
-
-  function saveOpts(opts) {
-    try { localStorage.setItem(OPT_STORAGE_KEY, JSON.stringify(opts)); } catch (e) {}
-    window.__tetrisOpts = opts;
-  }
-
-  function renderKeybinds() {
-    const kbListEl = $('t-keybinds-list');
-    if (!kbListEl) return;
-    kbListEl.innerHTML = '';
-
-    // ── Optimization section ──
-    const optHeader = document.createElement('div');
-    optHeader.className = 't-page-title';
-    optHeader.style.cssText = 'margin-top:2px;';
-    optHeader.textContent = 'Performance';
-    kbListEl.appendChild(optHeader);
-
-    const opts = getOpts();
-    OPT_DEFS.forEach(d => {
-      const row = document.createElement('label');
-      row.className = 't-opt-row';
-      row.style.cssText = 'display:flex;align-items:center;justify-content:space-between;gap:10px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.02);border:1px solid rgba(255,255,255,.04);cursor:pointer;';
-
-      const span = document.createElement('span');
-      span.style.cssText = 'font-weight:600;font-size:12px;opacity:.9;';
-      span.textContent = d.label;
-
-      const toggle = document.createElement('input');
-      toggle.type = 'checkbox';
-      toggle.checked = opts[d.key];
-      toggle.style.cssText = 'width:16px;height:16px;cursor:pointer;accent-color:#7dd3fc;';
-      toggle.addEventListener('change', () => {
-        const o = getOpts(); o[d.key] = toggle.checked; saveOpts(o);
-      });
-
-      row.appendChild(span);
-      row.appendChild(toggle);
-      kbListEl.appendChild(row);
-    });
-
-    // ── Keybinds section ──
-    const kbHeader = document.createElement('div');
-    kbHeader.className = 't-page-title';
-    kbHeader.style.cssText = 'margin-top:6px;';
-    kbHeader.textContent = 'Key Bindings';
-    kbListEl.appendChild(kbHeader);
-
-    const binds = getKeybinds();
-    KEYBIND_DEFS.forEach(d => {
-      const row = document.createElement('div');
-      row.className = 't-keybind-row';
-
-      const label = document.createElement('div');
-      label.className = 'piece';
-      label.style.cssText = 'font-weight:600;font-size:12px;';
-      label.textContent = d.label;
-
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 't-keybind-btn';
-      btn.dataset.action = d.action;
-
-      if (listeningFor === d.action) {
-        btn.classList.add('listening');
-        btn.textContent = 'Press key…';
-      } else {
-        btn.textContent = displayKey(binds[d.action]);
-      }
-
-      btn.addEventListener('click', (e) => {
-        e.preventDefault(); e.stopPropagation();
-        listeningFor = (listeningFor === d.action) ? null : d.action;
-        renderKeybinds();
-      });
-
-      row.appendChild(label);
-      row.appendChild(btn);
-      kbListEl.appendChild(row);
-    });
-
-    // Reset button
-    const resetBtn = document.createElement('button');
-    resetBtn.type = 'button';
-    resetBtn.className = 't-keybind-reset';
-    resetBtn.textContent = 'Reset Keybinds to Defaults';
-    resetBtn.addEventListener('click', (e) => {
-      e.preventDefault(); e.stopPropagation();
-      const defaults = {};
-      KEYBIND_DEFS.forEach(d => { defaults[d.action] = d.default; });
-      saveKeybinds(defaults);
-      listeningFor = null;
-      renderKeybinds();
-    });
-    kbListEl.appendChild(resetBtn);
-  }
-
-  // Capture key press for rebinding (capture phase so it fires before game)
-  document.addEventListener('keydown', (e) => {
-    if (!listeningFor) return;
-    // Ignore modifier-only presses
-    if (['Control','Alt','Shift','Meta'].includes(e.key)) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const binds = getKeybinds();
-    binds[listeningFor] = e.key;
-    saveKeybinds(binds);
-    listeningFor = null;
-    renderKeybinds();
-  }, true);
-
-  // Init keybinds into window on load
-  window.__tetrisKeybinds = getKeybinds();
-
-  // ──────────────────────────────────────────
-  // ── COLOR CUSTOMIZATION ───────────────────
-  // ──────────────────────────────────────────
-  const COLOR_CUSTOM_DEFAULTS = {
-    hudColor:     '#0000ff',
-    nameColor:    '#ffffff',
-    bgColor:      '#000000',
-    gridColor:    '#444444',
-    outlineColor: '#000000',
-  };
-
-  function getColorCustom() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(COLOR_CUSTOM_STORAGE_KEY) || '{}');
-      return {
-        hudColor:     raw.hudColor     || COLOR_CUSTOM_DEFAULTS.hudColor,
-        nameColor:    raw.nameColor    || COLOR_CUSTOM_DEFAULTS.nameColor,
-        bgColor:      raw.bgColor      || COLOR_CUSTOM_DEFAULTS.bgColor,
-        gridColor:    raw.gridColor    || COLOR_CUSTOM_DEFAULTS.gridColor,
-        outlineColor: raw.outlineColor || COLOR_CUSTOM_DEFAULTS.outlineColor,
-      };
-    } catch (e) {
-      return Object.assign({}, COLOR_CUSTOM_DEFAULTS);
-    }
-  }
-
-  function applyColorCustomToGame(colors) {
-    window.__tetrisHudColor    = colors.hudColor;
-    window.__tetrisCanvasBg    = colors.bgColor;
-    window.__tetrisGridColor   = colors.gridColor;
-    window.__tetrisNameColor   = colors.nameColor;
-    window.__tetrisOutlineColor = colors.outlineColor;
-    if (typeof window.__tetrisUpdateHudColor === 'function') {
-      window.__tetrisUpdateHudColor();
-    } else if (typeof window.__tetrisRedrawGrid === 'function') {
-      window.__tetrisRedrawGrid();
-    }
-    if (typeof window.__tetrisUpdateNameColors === 'function') {
-      window.__tetrisUpdateNameColors();
-    }
-  }
-
-  function saveColorCustom(colors) {
-    try { localStorage.setItem(COLOR_CUSTOM_STORAGE_KEY, JSON.stringify(colors)); } catch (e) {}
-    applyColorCustomToGame(colors);
-  }
-
-  function renderColorCustom() {
-    const colors = getColorCustom();
-    const configs = [
-      { inputId: 't-hud-color',     hexId: 't-hud-color-hex',   prop: 'hudColor' },
-      { inputId: 't-name-color',    hexId: 't-name-color-hex',  prop: 'nameColor' },
-      { inputId: 't-bg-color',      hexId: 't-bg-color-hex',    prop: 'bgColor' },
-      { inputId: 't-grid-color',    hexId: 't-grid-color-hex',  prop: 'gridColor' },
-    ];
-    configs.forEach(({ inputId, hexId, prop }) => {
-      const input = $(inputId), hexEl = $(hexId);
-      if (input) input.value = colors[prop];
-      if (hexEl) hexEl.textContent = colors[prop].toUpperCase();
-    });
-  }
-
-  function initColorCustom() {
-    const configs = [
-      { inputId: 't-hud-color',     hexId: 't-hud-color-hex',   prop: 'hudColor' },
-      { inputId: 't-name-color',    hexId: 't-name-color-hex',  prop: 'nameColor' },
-      { inputId: 't-bg-color',      hexId: 't-bg-color-hex',    prop: 'bgColor' },
-      { inputId: 't-grid-color',    hexId: 't-grid-color-hex',  prop: 'gridColor' },
-    ];
-    configs.forEach(({ inputId, hexId, prop }) => {
-      const input = $(inputId), hexEl = $(hexId);
-      if (!input) return;
-      input.addEventListener('pointerdown', e => e.stopPropagation());
-      input.addEventListener('click', e => e.stopPropagation());
-      const onChange = () => {
-        const colors = getColorCustom();
-        colors[prop] = input.value;
-        if (hexEl) hexEl.textContent = input.value.toUpperCase();
-        saveColorCustom(colors);
-      };
-      input.addEventListener('input', onChange);
-      input.addEventListener('change', onChange);
-    });
-
-    // Outline color (lives on Tetromino Colors page)
-    const outlineInput = $('t-outline-color'), outlineHex = $('t-outline-color-hex');
-    if (outlineInput) {
-      const saved = getColorCustom();
-      outlineInput.value = saved.outlineColor;
-      if (outlineHex) outlineHex.textContent = saved.outlineColor.toUpperCase();
-      outlineInput.addEventListener('pointerdown', e => e.stopPropagation());
-      outlineInput.addEventListener('click', e => e.stopPropagation());
-      const onOutlineChange = () => {
-        const colors = getColorCustom();
-        colors.outlineColor = outlineInput.value;
-        if (outlineHex) outlineHex.textContent = outlineInput.value.toUpperCase();
-        saveColorCustom(colors);
-      };
-      outlineInput.addEventListener('input', onOutlineChange);
-      outlineInput.addEventListener('change', onOutlineChange);
-    }
-
-    // Apply saved colors on load
-    const colors = getColorCustom();
-    applyColorCustomToGame(colors);
-  }
-
-  // ──────────────────────────────────────────
-  // ── FUN CUSTOMIZATION ─────────────────────
-  // ──────────────────────────────────────────
-  const FUN_STORAGE_KEY = 'tetris_fun_custom_v1';
-  const FUN_DEFAULTS = {
-    dotOn:          '#6ee7b7',
-    dotOff:         '#666666',
-    onlinePanelBg:  '#06080a',
-    settingsPanelBg:'#06080a',
-    pageBg:         '#111111',
-  };
-
-  function getFunCustom() {
-    try {
-      const raw = JSON.parse(localStorage.getItem(FUN_STORAGE_KEY) || '{}');
-      return {
-        dotOn:           raw.dotOn           || FUN_DEFAULTS.dotOn,
-        dotOff:          raw.dotOff          || FUN_DEFAULTS.dotOff,
-        onlinePanelBg:   raw.onlinePanelBg   || FUN_DEFAULTS.onlinePanelBg,
-        settingsPanelBg: raw.settingsPanelBg || FUN_DEFAULTS.settingsPanelBg,
-        pageBg:          raw.pageBg          || FUN_DEFAULTS.pageBg,
-        tabTitle:        raw.tabTitle        || 'Tetris',
-        faviconUrl:      raw.faviconUrl      || 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4',
-      };
-    } catch (e) { return Object.assign({}, FUN_DEFAULTS, { tabTitle: 'Tetris', faviconUrl: 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4' }); }
-  }
-
-  function applyFunCustom(fun) {
-    document.documentElement.style.setProperty('--t-dot-on',  fun.dotOn);
-    document.documentElement.style.setProperty('--t-dot-off', fun.dotOff);
-    document.documentElement.style.setProperty('--t-page-bg', fun.pageBg);
-    const onP = $('tetris-online-panel');
-    if (onP) onP.style.background = fun.onlinePanelBg;
-    const setP = $('tetris-settings-panel');
-    if (setP) setP.style.background = fun.settingsPanelBg;
-    if (typeof fun.tabTitle === 'string' && fun.tabTitle.trim()) {
-      document.title = fun.tabTitle.trim();
-      const titleInput = $('t-tab-title');
-      if (titleInput && titleInput !== document.activeElement) titleInput.value = fun.tabTitle.trim();
-    } else {
-      document.title = 'Tetris';
-    }
-    const faviconUrl = typeof fun.faviconUrl === 'string' && fun.faviconUrl.trim()
-      ? fun.faviconUrl.trim()
-      : 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4';
-    let link = document.querySelector('link[rel="icon"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.type = 'image/png';
-    link.href = faviconUrl;
-    const faviconInput = $('t-favicon-url');
-    if (faviconInput && faviconInput !== document.activeElement) faviconInput.value = faviconUrl;
-  }
-
-  function saveFunCustom(fun) {
-    try { localStorage.setItem(FUN_STORAGE_KEY, JSON.stringify(fun)); } catch (e) {}
-    applyFunCustom(fun);
-  }
-
-  function renderFunCustom() {
-    const fun = getFunCustom();
-    const configs = [
-      { inputId: 't-page-bg-color',        hexId: 't-page-bg-hex',        prop: 'pageBg' },
-      { inputId: 't-dot-on-color',         hexId: 't-dot-on-hex',         prop: 'dotOn' },
-      { inputId: 't-dot-off-color',        hexId: 't-dot-off-hex',        prop: 'dotOff' },
-      { inputId: 't-online-panel-color',   hexId: 't-online-panel-hex',   prop: 'onlinePanelBg' },
-      { inputId: 't-settings-panel-color', hexId: 't-settings-panel-hex', prop: 'settingsPanelBg' },
-    ];
-    configs.forEach(({ inputId, hexId, prop }) => {
-      const input = $(inputId), hexEl = $(hexId);
-      if (input) input.value = fun[prop];
-      if (hexEl) hexEl.textContent = fun[prop].toUpperCase();
-    });
-    const tabInput = $('t-tab-title');
-    const favInput = $('t-favicon-url');
-    if (tabInput) tabInput.value = fun.tabTitle || 'Tetris';
-    if (favInput) favInput.value = fun.faviconUrl || 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4';
-  }
-
-  function initFunCustom() {
-    const configs = [
-      { inputId: 't-page-bg-color',        hexId: 't-page-bg-hex',        prop: 'pageBg' },
-      { inputId: 't-dot-on-color',         hexId: 't-dot-on-hex',         prop: 'dotOn' },
-      { inputId: 't-dot-off-color',        hexId: 't-dot-off-hex',        prop: 'dotOff' },
-      { inputId: 't-online-panel-color',   hexId: 't-online-panel-hex',   prop: 'onlinePanelBg' },
-      { inputId: 't-settings-panel-color', hexId: 't-settings-panel-hex', prop: 'settingsPanelBg' },
-    ];
-    configs.forEach(({ inputId, hexId, prop }) => {
-      const input = $(inputId), hexEl = $(hexId);
-      if (!input) return;
-      input.addEventListener('pointerdown', e => e.stopPropagation());
-      input.addEventListener('click', e => e.stopPropagation());
-      const onChange = () => {
-        const fun = getFunCustom();
-        fun[prop] = input.value;
-        if (hexEl) hexEl.textContent = input.value.toUpperCase();
-        saveFunCustom(fun);
-      };
-      input.addEventListener('input', onChange);
-      input.addEventListener('change', onChange);
-    });
-
-    const tabInput = $('t-tab-title');
-    const favInput = $('t-favicon-url');
-    if (tabInput) {
-      tabInput.addEventListener('pointerdown', e => e.stopPropagation());
-      tabInput.addEventListener('click', e => e.stopPropagation());
-      const onTitleChange = () => {
-        const fun = getFunCustom();
-        fun.tabTitle = tabInput.value || 'Tetris';
-        saveFunCustom(fun);
-      };
-      tabInput.addEventListener('input', onTitleChange);
-      tabInput.addEventListener('change', onTitleChange);
-    }
-    if (favInput) {
-      favInput.addEventListener('pointerdown', e => e.stopPropagation());
-      favInput.addEventListener('click', e => e.stopPropagation());
-      const onFavChange = () => {
-        const fun = getFunCustom();
-        fun.faviconUrl = favInput.value || 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4';
-        saveFunCustom(fun);
-      };
-      favInput.addEventListener('input', onFavChange);
-      favInput.addEventListener('change', onFavChange);
-    }
-    applyFunCustom(getFunCustom());
-  }
-
-  // ──────────────────────────────────────────
-  // ── BUTTON WIRING ─────────────────────────
-  // ──────────────────────────────────────────
-
-  // Home page nav buttons
-  const navKeybindsBtn    = $('t-nav-keybinds');
-  const navTetrominoBtn   = $('t-nav-tetromino');
-  const navColorCustomBtn = $('t-nav-color-custom');
-  const navFunCustomBtn   = $('t-nav-fun-custom');
-  const cycleAddBtn       = $('t-cycle-add-color');
-  const cycleResetBtn     = $('t-cycle-reset-colors');
-  const cycleUseBtn       = $('t-cycle-use');
-  const cycleSpeedSlider  = $('t-cycle-speed');
-  const cycleAfterPlace   = $('t-cycle-after-place');
-
-  if (navKeybindsBtn)    navKeybindsBtn.addEventListener('click',    (e) => { e.preventDefault(); e.stopPropagation(); showView('keybinds'); });
-  if (navTetrominoBtn)   navTetrominoBtn.addEventListener('click',   (e) => { e.preventDefault(); e.stopPropagation(); showView('colors'); });
-  if (navColorCustomBtn) navColorCustomBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showView('color-custom'); });
-  if (navFunCustomBtn)   navFunCustomBtn.addEventListener('click',   (e) => { e.preventDefault(); e.stopPropagation(); showView('fun-custom'); });
-
-  // Back buttons
-  const keybindsBackBtn    = $('t-keybinds-back');
-  const colorsBackBtn      = $('t-colors-back');
-  const colorCustomBackBtn = $('t-color-custom-back');
-  const funCustomBackBtn   = $('t-fun-custom-back');
-
-  if (keybindsBackBtn)    keybindsBackBtn.addEventListener('click',    (e) => { e.preventDefault(); e.stopPropagation(); listeningFor = null; showView('home'); });
-  if (colorsBackBtn)      colorsBackBtn.addEventListener('click',      (e) => { e.preventDefault(); e.stopPropagation(); showView('home'); });
-  if (colorCustomBackBtn) colorCustomBackBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showView('home'); });
-  if (funCustomBackBtn)   funCustomBackBtn.addEventListener('click',   (e) => { e.preventDefault(); e.stopPropagation(); showView('home'); });
-  if (cycleAddBtn)        cycleAddBtn.addEventListener('click',        (e) => { e.preventDefault(); e.stopPropagation(); const next = getCycleColors().concat('#ffffff'); saveCycleColors(next, true); renderCycleCustom(); updateCycleEditorVisibility(); });
-  if (cycleResetBtn)      cycleResetBtn.addEventListener('click',      (e) => { e.preventDefault(); e.stopPropagation(); const next = getDefaultCycleColors(); saveCycleColors(next, true); renderCycleCustom(); updateCycleEditorVisibility(); });
-  if (cycleUseBtn)        cycleUseBtn.addEventListener('click',        (e) => { e.preventDefault(); e.stopPropagation(); setCycleMode('custom'); const next = getCycleColors(); saveCycleColors(next, true); updateCycleEditorVisibility(); });
-  if (cycleSpeedSlider) {
-    cycleSpeedSlider.addEventListener('input', () => {
-      const next = Number(cycleSpeedSlider.value) || 140;
-      if (typeof window.__setTetrominoRgbSpeed === 'function') window.__setTetrominoRgbSpeed(next);
-      syncRgbUi();
-    });
-  }
-  if (cycleAfterPlace) {
-    cycleAfterPlace.addEventListener('change', () => {
-      setRgbAfterPlaceEnabled(!!cycleAfterPlace.checked);
-      syncRgbUi();
-    });
-  }
-
-  // Tetromino presets
-  if (openPresetsBtn) {
-    openPresetsBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      showView('presets');
-    });
-  }
-
-  if (backBtn) {
-    backBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      showView('colors');
-    });
-  }
-
-  if (saveBtn) {
-    saveBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const list = getCustomPresetList();
-      const emptyIndex = list.findIndex(slot => !slot);
-      if (emptyIndex === -1) {
-        window.alert('You already have 5 presets. Delete one first.');
-        return;
-      }
-      saveToSlot(emptyIndex);
-    });
-  }
-
-  if (hideBtn) {
-    hideBtn.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      return false;
-    });
-  }
-
-  if (rgbSlider) {
-    rgbSlider.addEventListener('input', () => {
-      const next = Number(rgbSlider.value) || 140;
-      if (typeof window.__setTetrominoRgbSpeed === 'function') {
-        window.__setTetrominoRgbSpeed(next);
-      }
-      syncRgbUi();
-      if (isRgbActive()) renderRows();
-    });
-  }
-
-  if (rgbAfterPlaceToggle) {
-    rgbAfterPlaceToggle.addEventListener('change', () => {
-      setRgbAfterPlaceEnabled(!!rgbAfterPlaceToggle.checked);
-      if (isRgbActive()) renderRows();
-    });
-  }
-
-  // ── Init ──
-  initColorCustom();
-  initFunCustom();
-  saveOpts(getOpts()); // apply saved opts to window.__tetrisOpts
-  updateHintBar(getKeybinds()); // init hint bar
-  renderBuiltinPresets();
-  renderCustomPresets();
-  renderCycleCustom();
-  syncRgbUi();
-  setRgbAfterPlaceEnabled(getRgbAfterPlaceEnabled());
-  showView('home');
-
-  window.addEventListener('focus', () => {
-    currentColors = getColors();
-    updatePresetButtons();
-    updateCustomPresetButtons();
-    syncRgbUi();
-    if (view === 'colors') renderRows();
-  });
-
-  window.addEventListener('storage', (e) => {
-    if (e.key === STORAGE_KEY) {
-      currentColors = getColors();
-      if (view === 'colors') renderRows();
-      updatePresetButtons();
-      updateCustomPresetButtons();
-      syncRgbUi();
-    }
-    if (e.key === CUSTOM_PRESET_KEY) {
-      renderCustomPresets();
-    }
-    if (e.key === CYCLE_COLORS_STORAGE_KEY) {
-      if (view === 'colors') { renderCycleCustom(); updateCycleEditorVisibility(); }
-      syncRgbUi();
-    }
-  });
+  window.__tetrisCloudSync = { login, logout, signup, pushSettings };
 })();
+`;
+    await runInlineScript(CLOUD_SYNC_CODE);
+  }
 
-</script>
+  async function start() {
+    try {
+      const response = await fetch(indexUrl, { cache: 'no-store' });
+      if (!response.ok) throw new Error('HTTP ' + response.status);
 
+      const html = await response.text();
+      const doc = new DOMParser().parseFromString(html, 'text/html');
 
+      document.head.innerHTML = `
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="icon" type="image/png"
+              href="https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4">
+        <title>Tetris</title>
+      `;
 
-  <script src="js/multiplayer.js"></script>
+      forceTitle();
 
-<script>
-setTimeout(function(){
-  const DEFAULT_FAVICON='https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4';
-  const DEFAULT_FUN = {
-    pageBg: '#111111',
-    dotOn: '#6ee7b7',
-    dotOff: '#666666',
-    onlinePanelBg: '#06080a',
-    settingsPanelBg: '#06080a',
-    tabTitle: 'Tetris',
-    faviconUrl: DEFAULT_FAVICON
-  };
-  const DEFAULT_COLOR = {
-    hudColor: '#0000ff',
-    nameColor: '#ffffff',
-    bgColor: '#000000',
-    gridColor: '#444444',
-    outlineColor: '#000000'
-  };
-  const DEFAULT_TETROMINO_COLORS = Array.isArray(window.__tetrominoDefaultColors) && window.__tetrominoDefaultColors.length
-    ? window.__tetrominoDefaultColors.slice()
-    : ['#00ffff','#ffff00','#ff00ff','#0000ff','#ffa500','#00ff00','#ff0000'];
+      [...doc.querySelectorAll('style, link[rel="stylesheet"]')].forEach(el => {
+        document.head.appendChild(document.adoptNode(el));
+      });
 
-  function setInputValue(id, value, fire = true) {
-    const el = document.getElementById(id);
-    if (!el) return null;
-    el.value = value;
-    if (fire) {
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.dispatchEvent(new Event('change', { bubbles: true }));
+      document.body.innerHTML = doc.body.innerHTML;
+
+      const scripts = [...doc.querySelectorAll('script')];
+
+      for (const s of scripts) {
+        const src = s.getAttribute('src');
+        if (src) {
+          await loadScript(new URL(src, repoBase).href);
+        } else if (s.textContent.trim()) {
+          await runInlineScript(s.textContent);
+        }
+      }
+
+      forceTitle();
+      setInterval(forceTitle, 250);
+
+      // Inject cloud sync AFTER the game has fully loaded
+      await injectCloudSync();
+
+    } catch (error) {
+      document.body.innerHTML =
+        '<div style="padding:40px;font-family:system-ui;color:#fff;background:#111;min-height:100vh;">' +
+        '<h2>Could not load the game</h2><pre style="opacity:.7;font-size:13px;">' + String(error) + '</pre></div>';
     }
-    return el;
   }
 
-  function setTextContent(id, value) {
-    const el = document.getElementById(id);
-    if (el) el.textContent = value;
-  }
-
-  function resetFunUi() {
-    document.documentElement.style.setProperty('--t-page-bg', DEFAULT_FUN.pageBg);
-    document.documentElement.style.setProperty('--t-dot-on', DEFAULT_FUN.dotOn);
-    document.documentElement.style.setProperty('--t-dot-off', DEFAULT_FUN.dotOff);
-
-    const onlinePanel = document.getElementById('tetris-online-panel');
-    if (onlinePanel) onlinePanel.style.background = DEFAULT_FUN.onlinePanelBg;
-    const settingsPanel = document.getElementById('tetris-settings-panel');
-    if (settingsPanel) settingsPanel.style.background = DEFAULT_FUN.settingsPanelBg;
-
-    setInputValue('t-page-bg-color', DEFAULT_FUN.pageBg, true);
-    setInputValue('t-dot-on-color', DEFAULT_FUN.dotOn, true);
-    setInputValue('t-dot-off-color', DEFAULT_FUN.dotOff, true);
-    setInputValue('t-online-panel-color', DEFAULT_FUN.onlinePanelBg, true);
-    setInputValue('t-settings-panel-color', DEFAULT_FUN.settingsPanelBg, true);
-    setInputValue('t-tab-title', DEFAULT_FUN.tabTitle, true);
-    setInputValue('t-favicon-url', DEFAULT_FUN.faviconUrl, true);
-
-    setTextContent('t-page-bg-hex', DEFAULT_FUN.pageBg.toUpperCase());
-    setTextContent('t-dot-on-hex', DEFAULT_FUN.dotOn.toUpperCase());
-    setTextContent('t-dot-off-hex', DEFAULT_FUN.dotOff.toUpperCase());
-    setTextContent('t-online-panel-hex', DEFAULT_FUN.onlinePanelBg.toUpperCase());
-    setTextContent('t-settings-panel-hex', DEFAULT_FUN.settingsPanelBg.toUpperCase());
-    setTextContent('t-tab-title-hex', 'TITLE');
-    setTextContent('t-favicon-url-hex', 'ICON');
-
-    const link = document.querySelector('link[rel="icon"]');
-    if (link) link.href = DEFAULT_FUN.faviconUrl;
-    document.title = DEFAULT_FUN.tabTitle;
-  }
-
-  function resetColorUi() {
-    setInputValue('t-hud-color', DEFAULT_COLOR.hudColor, true);
-    setInputValue('t-name-color', DEFAULT_COLOR.nameColor, true);
-    setInputValue('t-bg-color', DEFAULT_COLOR.bgColor, true);
-    setInputValue('t-grid-color', DEFAULT_COLOR.gridColor, true);
-    setInputValue('t-outline-color', DEFAULT_COLOR.outlineColor, true);
-
-    setTextContent('t-hud-color-hex', DEFAULT_COLOR.hudColor.toUpperCase());
-    setTextContent('t-name-color-hex', DEFAULT_COLOR.nameColor.toUpperCase());
-    setTextContent('t-bg-color-hex', DEFAULT_COLOR.bgColor.toUpperCase());
-    setTextContent('t-grid-color-hex', DEFAULT_COLOR.gridColor.toUpperCase());
-    setTextContent('t-outline-color-hex', DEFAULT_COLOR.outlineColor.toUpperCase());
-  }
-
-  const funBtn=document.getElementById('t-fun-reset-defaults');
-  if(funBtn) funBtn.addEventListener('click', function(ev){
-    ev.preventDefault();
-    ev.stopPropagation();
-    try{
-      localStorage.removeItem('tetris_fun_custom_v1');
-    }catch(e){}
-    resetFunUi();
-  });
-
-  const colorBtn=document.getElementById('t-color-reset-defaults');
-  if(colorBtn) colorBtn.addEventListener('click', function(ev){
-    ev.preventDefault();
-    ev.stopPropagation();
-    try{
-      const saved = getColorCustom();
-      const next = {
-        hudColor: DEFAULT_COLOR.hudColor,
-        nameColor: DEFAULT_COLOR.nameColor,
-        bgColor: DEFAULT_COLOR.bgColor,
-        gridColor: DEFAULT_COLOR.gridColor,
-        outlineColor: saved.outlineColor || DEFAULT_COLOR.outlineColor
-      };
-      localStorage.setItem(COLOR_CUSTOM_STORAGE_KEY, JSON.stringify(next));
-      applyColorCustomToGame(next);
-      renderColorCustom();
-    }catch(e){
-      resetColorUi();
-    }
-  });
-
-  const desiredTitle=()=>{try{return (JSON.parse(localStorage.getItem('tetris_fun_custom_v1')||'{}').tabTitle)||'Tetris';}catch(e){return 'Tetris';}};
-  const titleEl = document.querySelector('title');
-  if (titleEl) {
-    new MutationObserver(function(){
-      const target = desiredTitle();
-      if (document.title !== target) document.title = target;
-    }).observe(titleEl,{childList:true});
-  }
-},0);
+  start();
 </script>
-
-  <!-- ===== Override / patch game's handleKeyDown so it respects chat focus ===== -->
-
-
 </body>
 </html>
