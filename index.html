@@ -2640,43 +2640,148 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
 
   <script src="js/multiplayer.js"></script>
+
 <script>
 setTimeout(function(){
   const DEFAULT_FAVICON='https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4';
+  const DEFAULT_FUN = {
+    pageBg: '#111111',
+    dotOn: '#6ee7b7',
+    dotOff: '#666666',
+    onlinePanelBg: '#06080a',
+    settingsPanelBg: '#06080a',
+    tabTitle: 'Tetris',
+    faviconUrl: DEFAULT_FAVICON
+  };
+  const DEFAULT_COLOR = {
+    hudColor: '#0000ff',
+    nameColor: '#ffffff',
+    bgColor: '#000000',
+    gridColor: '#444444',
+    outlineColor: '#000000'
+  };
+  const DEFAULT_TETROMINO_COLORS = Array.isArray(window.__tetrominoDefaultColors) && window.__tetrominoDefaultColors.length
+    ? window.__tetrominoDefaultColors.slice()
+    : ['#00ffff','#ffff00','#ff00ff','#0000ff','#ffa500','#00ff00','#ff0000'];
+
+  function setInputValue(id, value, fire = true) {
+    const el = document.getElementById(id);
+    if (!el) return null;
+    el.value = value;
+    if (fire) {
+      el.dispatchEvent(new Event('input', { bubbles: true }));
+      el.dispatchEvent(new Event('change', { bubbles: true }));
+    }
+    return el;
+  }
+
+  function setTextContent(id, value) {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  }
+
+  function resetFunUi() {
+    document.documentElement.style.setProperty('--t-page-bg', DEFAULT_FUN.pageBg);
+    document.documentElement.style.setProperty('--t-dot-on', DEFAULT_FUN.dotOn);
+    document.documentElement.style.setProperty('--t-dot-off', DEFAULT_FUN.dotOff);
+
+    const onlinePanel = document.getElementById('tetris-online-panel');
+    if (onlinePanel) onlinePanel.style.background = DEFAULT_FUN.onlinePanelBg;
+    const settingsPanel = document.getElementById('tetris-settings-panel');
+    if (settingsPanel) settingsPanel.style.background = DEFAULT_FUN.settingsPanelBg;
+
+    setInputValue('t-page-bg-color', DEFAULT_FUN.pageBg, true);
+    setInputValue('t-dot-on-color', DEFAULT_FUN.dotOn, true);
+    setInputValue('t-dot-off-color', DEFAULT_FUN.dotOff, true);
+    setInputValue('t-online-panel-color', DEFAULT_FUN.onlinePanelBg, true);
+    setInputValue('t-settings-panel-color', DEFAULT_FUN.settingsPanelBg, true);
+    setInputValue('t-tab-title', DEFAULT_FUN.tabTitle, true);
+    setInputValue('t-favicon-url', DEFAULT_FUN.faviconUrl, true);
+
+    setTextContent('t-page-bg-hex', DEFAULT_FUN.pageBg.toUpperCase());
+    setTextContent('t-dot-on-hex', DEFAULT_FUN.dotOn.toUpperCase());
+    setTextContent('t-dot-off-hex', DEFAULT_FUN.dotOff.toUpperCase());
+    setTextContent('t-online-panel-hex', DEFAULT_FUN.onlinePanelBg.toUpperCase());
+    setTextContent('t-settings-panel-hex', DEFAULT_FUN.settingsPanelBg.toUpperCase());
+    setTextContent('t-tab-title-hex', 'TITLE');
+    setTextContent('t-favicon-url-hex', 'ICON');
+
+    const link = document.querySelector('link[rel="icon"]');
+    if (link) link.href = DEFAULT_FUN.faviconUrl;
+    document.title = DEFAULT_FUN.tabTitle;
+  }
+
+  function resetColorUi() {
+    setInputValue('t-hud-color', DEFAULT_COLOR.hudColor, true);
+    setInputValue('t-name-color', DEFAULT_COLOR.nameColor, true);
+    setInputValue('t-bg-color', DEFAULT_COLOR.bgColor, true);
+    setInputValue('t-grid-color', DEFAULT_COLOR.gridColor, true);
+    setInputValue('t-outline-color', DEFAULT_COLOR.outlineColor, true);
+
+    setTextContent('t-hud-color-hex', DEFAULT_COLOR.hudColor.toUpperCase());
+    setTextContent('t-name-color-hex', DEFAULT_COLOR.nameColor.toUpperCase());
+    setTextContent('t-bg-color-hex', DEFAULT_COLOR.bgColor.toUpperCase());
+    setTextContent('t-grid-color-hex', DEFAULT_COLOR.gridColor.toUpperCase());
+    setTextContent('t-outline-color-hex', DEFAULT_COLOR.outlineColor.toUpperCase());
+
+    if (typeof window.__setTetrominoColors === 'function') {
+      try { window.__setTetrominoColors(DEFAULT_TETROMINO_COLORS, { mode: 'static' }); } catch (e) {}
+    }
+    if (typeof window.__setTetrominoCycleMode === 'function') {
+      try { window.__setTetrominoCycleMode('static'); } catch (e) {}
+    }
+    if (typeof window.__setTetrominoRgbSpeed === 'function') {
+      try { window.__setTetrominoRgbSpeed(140); } catch (e) {}
+    }
+    if (typeof window.__setTetrominoRgbAfterPlace === 'function') {
+      try { window.__setTetrominoRgbAfterPlace(false); } catch (e) {}
+    }
+  }
 
   const funBtn=document.getElementById('t-fun-reset-defaults');
-  if(funBtn) funBtn.onclick=function(){
+  if(funBtn) funBtn.addEventListener('click', function(ev){
+    ev.preventDefault();
+    ev.stopPropagation();
     try{
       localStorage.removeItem('tetris_fun_custom_v1');
-      document.title='Tetris';
-      const link=document.querySelector('link[rel="icon"]');
-      if(link) link.href=DEFAULT_FAVICON;
-      if(typeof renderFunCustom==='function') renderFunCustom();
-      if(typeof applyFunCustom==='function') applyFunCustom({dotOn:'#6ee7b7',dotOff:'#666666',onlinePanelBg:'#06080a',settingsPanelBg:'#06080a',pageBg:'#111111',tabTitle:'Tetris',faviconUrl:DEFAULT_FAVICON});
     }catch(e){}
-  };
+    resetFunUi();
+  });
 
   const colorBtn=document.getElementById('t-color-reset-defaults');
-  if(colorBtn) colorBtn.onclick=function(){
+  if(colorBtn) colorBtn.addEventListener('click', function(ev){
+    ev.preventDefault();
+    ev.stopPropagation();
     try{
       localStorage.removeItem('tetris_color_custom_v1');
       localStorage.removeItem('tetris_tetromino_preset_v1');
+      localStorage.removeItem('tetris_tetromino_colors');
+      localStorage.removeItem('tetris_tetromino_mode');
+      localStorage.removeItem('tetris_rgb_cycle_ms');
+      localStorage.removeItem('tetris_rgb_after_place_cycle');
       localStorage.removeItem('tetris_custom_cycle_colors_v1');
       localStorage.removeItem('tetris_custom_cycle_ms_v1');
       localStorage.removeItem('tetris_custom_cycle_after_place_v1');
       localStorage.removeItem('tetrisTetrominoColors');
       localStorage.removeItem('tetrisColorCustomization');
-      location.reload();
     }catch(e){}
-  };
+    resetColorUi();
+    setTimeout(()=>location.reload(), 50);
+  });
 
   const desiredTitle=()=>{try{return (JSON.parse(localStorage.getItem('tetris_fun_custom_v1')||'{}').tabTitle)||'Tetris';}catch(e){return 'Tetris';}};
-  new MutationObserver(function(){ if(document.title!==desiredTitle()) document.title=desiredTitle();})
-    .observe(document.querySelector('title'),{childList:true});
+  const titleEl = document.querySelector('title');
+  if (titleEl) {
+    new MutationObserver(function(){
+      const target = desiredTitle();
+      if (document.title !== target) document.title = target;
+    }).observe(titleEl,{childList:true});
+  }
 },0);
 </script>
 
   <!-- ===== Override / patch game's handleKeyDown so it respects chat focus ===== -->
+
 
 </body>
 </html>
