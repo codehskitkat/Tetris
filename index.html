@@ -776,6 +776,28 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       </div>
       <div class="t-settings-presets" id="t-settings-presets"></div>
       <div class="t-settings-list" id="t-settings-list"></div>
+
+      <!-- CUSTOM CYCLE EDITOR (INLINE) -->
+      <div class="t-cycle-editor" id="t-settings-page-cycle-custom" style="display:none; margin-top:8px; flex-direction:column; gap:10px;">
+        <div class="t-page-title">Custom Cycle</div>
+        <div class="t-cycle-toolbar" style="margin-bottom:2px;">
+          <button type="button" class="t-mini-btn" id="t-cycle-add-color">Add Color</button>
+          <button type="button" class="t-mini-btn" id="t-cycle-reset-colors">Reset</button>
+          <button type="button" class="t-mini-btn" id="t-cycle-use">Use Custom Cycle</button>
+        </div>
+        <div class="t-cycle-list" id="t-cycle-list"></div>
+        <div class="t-rgb-control" id="t-cycle-control" style="display:flex;">
+          <div class="t-rgb-control-head">
+            <span>Cycle speed</span>
+            <span class="t-rgb-speed-label" id="t-cycle-speed-label">140 ms</span>
+          </div>
+          <input type="range" class="t-rgb-speed" id="t-cycle-speed" min="60" max="1000" step="10" value="140" />
+          <label class="t-rgb-after-place-row" for="t-cycle-after-place">
+            <input type="checkbox" id="t-cycle-after-place" />
+            <span id="t-cycle-after-place-label">Enable cycle after place</span>
+          </label>
+        </div>
+      </div>
     </div>
 
     <!-- TETROMINO PRESETS SUB-PAGE -->
@@ -786,30 +808,6 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       </div>
       <div class="t-custom-presets" id="t-custom-presets"></div>
     </div>
-
-    <!-- CUSTOM CYCLE PAGE -->
-    <div class="t-settings-page" id="t-settings-page-cycle-custom" style="display:none;">
-      <button type="button" class="t-settings-back-btn" id="t-cycle-custom-back">← Back</button>
-      <div class="t-page-title">Custom Cycle</div>
-      <div class="t-cycle-toolbar" style="margin-bottom:2px;">
-        <button type="button" class="t-mini-btn" id="t-cycle-add-color">Add Color</button>
-        <button type="button" class="t-mini-btn" id="t-cycle-reset-colors">Reset</button>
-        <button type="button" class="t-mini-btn" id="t-cycle-use">Use Custom Cycle</button>
-      </div>
-      <div class="t-cycle-list" id="t-cycle-list"></div>
-      <div class="t-rgb-control" id="t-cycle-control" style="display:flex;">
-        <div class="t-rgb-control-head">
-          <span>Cycle speed</span>
-          <span class="t-rgb-speed-label" id="t-cycle-speed-label">140 ms</span>
-        </div>
-        <input type="range" class="t-rgb-speed" id="t-cycle-speed" min="60" max="1000" step="10" value="140" />
-        <label class="t-rgb-after-place-row" for="t-cycle-after-place">
-          <input type="checkbox" id="t-cycle-after-place" />
-          <span id="t-cycle-after-place-label">Enable cycle after place</span>
-        </label>
-      </div>
-    </div>
-
     <!-- COLOR CUSTOMIZATION PAGE -->
     <div class="t-settings-page" id="t-settings-page-color-custom" style="display:none;">
       <button type="button" class="t-settings-back-btn" id="t-color-custom-back">← Back</button>
@@ -1721,11 +1719,19 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     if (presetsEl) {
       [...presetsEl.querySelectorAll('.t-settings-preset')].forEach(btn => btn.classList.toggle('rgb-mode', cycleOn && btn.dataset.preset === 'rgb'));
     }
+    updateCycleEditorVisibility();
+  }
+
+  function updateCycleEditorVisibility() {
+    const editor = $('t-settings-page-cycle-custom');
+    if (!editor) return;
+    const visible = (window.__tetrominoMode || 'static') === 'custom';
+    editor.style.display = visible ? 'flex' : 'none';
   }
 
   function showView(which){
     view = which;
-    const PAGES = ['home','keybinds','colors','presets','cycle-custom','color-custom','fun-custom'];
+    const PAGES = ['home','keybinds','colors','presets','color-custom','fun-custom'];
     PAGES.forEach(p => {
       const el = $(`t-settings-page-${p}`);
       if (el) el.style.display = 'none';
@@ -1733,12 +1739,11 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const target = $(`t-settings-page-${which}`);
     if (target) target.style.display = 'flex';
 
-    const subtitles = { home:'Customization', keybinds:'Settings', colors:'Tetromino Colors', presets:'Presets', 'cycle-custom':'Custom Cycle', 'color-custom':'Color Customization', 'fun-custom':'Fun Customization' };
+    const subtitles = { home:'Customization', keybinds:'Settings', colors:'Tetromino Colors', presets:'Presets', 'color-custom':'Color Customization', 'fun-custom':'Fun Customization' };
     if (subtitleEl) subtitleEl.textContent = subtitles[which] || '';
 
-    if (which === 'colors') { renderRows(); renderBuiltinPresets(); }
+    if (which === 'colors') { renderRows(); renderBuiltinPresets(); updateCycleEditorVisibility(); }
     else if (which === 'presets') renderCustomPresets();
-    else if (which === 'cycle-custom') renderCycleCustom();
     else if (which === 'keybinds') renderKeybinds();
     else if (which === 'color-custom') renderColorCustom();
     else if (which === 'fun-custom') renderFunCustom();
@@ -1776,7 +1781,9 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         if (key === 'custom-cycle') {
           setCycleMode('custom');
           saveCycleColors(getCycleColors(), true);
-          showView('cycle-custom');
+          updateCycleEditorVisibility();
+          renderCycleCustom();
+          showView('colors');
           return;
         }
         const preset = (window.__tetrominoPresets && window.__tetrominoPresets[key]) ? window.__tetrominoPresets[key] : null;
@@ -2055,7 +2062,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       if (typeof window.__setTetrominoCycleColors === 'function') window.__setTetrominoCycleColors(next);
     }
     syncRgbUi();
-    if (view === 'cycle-custom') renderCycleCustom();
+    if (view === 'colors') { renderCycleCustom(); updateCycleEditorVisibility(); }
     if (view === 'colors') renderRows();
   }
 
@@ -2500,7 +2507,6 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
   const navTetrominoBtn   = $('t-nav-tetromino');
   const navColorCustomBtn = $('t-nav-color-custom');
   const navFunCustomBtn   = $('t-nav-fun-custom');
-  const cycleBackBtn      = $('t-cycle-custom-back');
   const cycleAddBtn       = $('t-cycle-add-color');
   const cycleResetBtn     = $('t-cycle-reset-colors');
   const cycleUseBtn       = $('t-cycle-use');
@@ -2522,10 +2528,9 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
   if (colorsBackBtn)      colorsBackBtn.addEventListener('click',      (e) => { e.preventDefault(); e.stopPropagation(); showView('home'); });
   if (colorCustomBackBtn) colorCustomBackBtn.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); showView('home'); });
   if (funCustomBackBtn)   funCustomBackBtn.addEventListener('click',   (e) => { e.preventDefault(); e.stopPropagation(); showView('home'); });
-  if (cycleBackBtn)       cycleBackBtn.addEventListener('click',       (e) => { e.preventDefault(); e.stopPropagation(); showView('colors'); });
-  if (cycleAddBtn)        cycleAddBtn.addEventListener('click',        (e) => { e.preventDefault(); e.stopPropagation(); const next = getCycleColors().concat('#ffffff'); saveCycleColors(next, true); renderCycleCustom(); });
-  if (cycleResetBtn)      cycleResetBtn.addEventListener('click',      (e) => { e.preventDefault(); e.stopPropagation(); const next = ['#ff0000', '#ffffff', '#0000ff']; saveCycleColors(next, true); renderCycleCustom(); });
-  if (cycleUseBtn)        cycleUseBtn.addEventListener('click',        (e) => { e.preventDefault(); e.stopPropagation(); setCycleMode('custom'); const next = getCycleColors(); saveCycleColors(next, true); });
+  if (cycleAddBtn)        cycleAddBtn.addEventListener('click',        (e) => { e.preventDefault(); e.stopPropagation(); const next = getCycleColors().concat('#ffffff'); saveCycleColors(next, true); renderCycleCustom(); updateCycleEditorVisibility(); });
+  if (cycleResetBtn)      cycleResetBtn.addEventListener('click',      (e) => { e.preventDefault(); e.stopPropagation(); const next = ['#ff0000', '#ffffff', '#0000ff']; saveCycleColors(next, true); renderCycleCustom(); updateCycleEditorVisibility(); });
+  if (cycleUseBtn)        cycleUseBtn.addEventListener('click',        (e) => { e.preventDefault(); e.stopPropagation(); setCycleMode('custom'); const next = getCycleColors(); saveCycleColors(next, true); updateCycleEditorVisibility(); });
   if (cycleSpeedSlider) {
     cycleSpeedSlider.addEventListener('input', () => {
       const next = Number(cycleSpeedSlider.value) || 140;
@@ -2629,7 +2634,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       renderCustomPresets();
     }
     if (e.key === CYCLE_COLORS_STORAGE_KEY) {
-      if (view === 'cycle-custom') renderCycleCustom();
+      if (view === 'colors') { renderCycleCustom(); updateCycleEditorVisibility(); }
       syncRgbUi();
     }
   });
