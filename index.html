@@ -1698,6 +1698,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
   function syncRgbUi(){
     const mode = window.__tetrominoMode || 'static';
     const cycleOn = mode === 'rgb' || mode === 'custom';
+    const rgbOn = mode === 'rgb';
     if (rgbControl) rgbControl.style.display = cycleOn ? 'flex' : 'none';
     if ($('t-cycle-control')) $('t-cycle-control').style.display = 'flex';
     const speed = Math.max(60, Math.min(1000, Number(window.__getTetrominoRgbSpeed ? window.__getTetrominoRgbSpeed() : window.__tetrominoRgbSpeed || 140) || 140));
@@ -1714,10 +1715,10 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     if ($('t-cycle-after-place-label')) $('t-cycle-after-place-label').textContent = 'Enable cycle after place';
 
     if (listEl) {
-      [...listEl.querySelectorAll('.t-setting-row')].forEach(row => row.classList.toggle('cycle-mode', cycleOn));
+      [...listEl.querySelectorAll('.t-setting-row')].forEach(row => row.classList.toggle('cycle-mode', rgbOn));
     }
     if (presetsEl) {
-      [...presetsEl.querySelectorAll('.t-settings-preset')].forEach(btn => btn.classList.toggle('rgb-mode', cycleOn && btn.dataset.preset === 'rgb'));
+      [...presetsEl.querySelectorAll('.t-settings-preset')].forEach(btn => btn.classList.toggle('rgb-mode', rgbOn && btn.dataset.preset === 'rgb'));
     }
     updateCycleEditorVisibility();
   }
@@ -1809,7 +1810,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     PIECES.forEach((piece, idx) => {
       const row = document.createElement('div');
       row.className = 't-setting-row';
-      row.classList.toggle('cycle-mode', rgbOn || window.__tetrominoMode === 'custom');
+      row.classList.toggle('cycle-mode', rgbOn);
 
       const label = document.createElement('div');
       label.className = 'piece';
