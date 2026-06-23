@@ -2639,23 +2639,41 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
 
 
-  <script src="js/multiplayer.js">
-  setTimeout(function(){
-    const funBtn=$('t-fun-reset-defaults');
-    if(funBtn) funBtn.onclick=function(){
-      const d=Object.assign({}, FUN_DEFAULTS, {tabTitle:'Tetris', faviconUrl:'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4'});
-      saveFunCustom(d);
-    };
-    const colorBtn=$('t-color-reset-defaults');
-    if(colorBtn) colorBtn.onclick=function(){
-      try{
-        localStorage.removeItem('tetrisColorCustomization');
-        localStorage.removeItem('tetrisTetrominoColors');
-        localStorage.removeItem('tetrisCustomCycle');
-        location.reload();
-      }catch(e){}
-    };
-  },0);
+  <script src="js/multiplayer.js"></script>
+<script>
+setTimeout(function(){
+  const DEFAULT_FAVICON='https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4';
+
+  const funBtn=document.getElementById('t-fun-reset-defaults');
+  if(funBtn) funBtn.onclick=function(){
+    try{
+      localStorage.removeItem('tetris_fun_custom_v1');
+      document.title='Tetris';
+      const link=document.querySelector('link[rel="icon"]');
+      if(link) link.href=DEFAULT_FAVICON;
+      if(typeof renderFunCustom==='function') renderFunCustom();
+      if(typeof applyFunCustom==='function') applyFunCustom({dotOn:'#6ee7b7',dotOff:'#666666',onlinePanelBg:'#06080a',settingsPanelBg:'#06080a',pageBg:'#111111',tabTitle:'Tetris',faviconUrl:DEFAULT_FAVICON});
+    }catch(e){}
+  };
+
+  const colorBtn=document.getElementById('t-color-reset-defaults');
+  if(colorBtn) colorBtn.onclick=function(){
+    try{
+      localStorage.removeItem('tetris_color_custom_v1');
+      localStorage.removeItem('tetris_tetromino_preset_v1');
+      localStorage.removeItem('tetris_custom_cycle_colors_v1');
+      localStorage.removeItem('tetris_custom_cycle_ms_v1');
+      localStorage.removeItem('tetris_custom_cycle_after_place_v1');
+      localStorage.removeItem('tetrisTetrominoColors');
+      localStorage.removeItem('tetrisColorCustomization');
+      location.reload();
+    }catch(e){}
+  };
+
+  const desiredTitle=()=>{try{return (JSON.parse(localStorage.getItem('tetris_fun_custom_v1')||'{}').tabTitle)||'Tetris';}catch(e){return 'Tetris';}};
+  new MutationObserver(function(){ if(document.title!==desiredTitle()) document.title=desiredTitle();})
+    .observe(document.querySelector('title'),{childList:true});
+},0);
 </script>
 
   <!-- ===== Override / patch game's handleKeyDown so it respects chat focus ===== -->
