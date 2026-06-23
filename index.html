@@ -813,7 +813,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     <!-- COLOR CUSTOMIZATION PAGE -->
     <div class="t-settings-page" id="t-settings-page-color-custom" style="display:none;">
       <button type="button" class="t-settings-back-btn" id="t-color-custom-back">← Back</button>
-      <div class="t-page-title">Color Customization</div>
+      <div class="t-page-title">Color Customization</div><button type="button" class="t-mini-btn" id="t-color-reset-defaults">Default</button>
       <div class="t-settings-list" style="gap:8px;">
         <div class="t-color-custom-row">
           <div class="t-color-custom-label">HUD Panel</div>
@@ -841,7 +841,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     <!-- FUN CUSTOMIZATION PAGE -->
     <div class="t-settings-page" id="t-settings-page-fun-custom" style="display:none;">
       <button type="button" class="t-settings-back-btn" id="t-fun-custom-back">← Back</button>
-      <div class="t-page-title">Fun Customization</div>
+      <div class="t-page-title">Fun Customization</div><button type="button" class="t-mini-btn" id="t-fun-reset-defaults">Default</button>
       <div class="t-settings-list" style="gap:8px;">
         <div class="t-color-custom-row">
           <div class="t-color-custom-label">Page BG</div>
@@ -2639,7 +2639,24 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
 
 
-  <script src="js/multiplayer.js"></script>
+  <script src="js/multiplayer.js">
+  setTimeout(function(){
+    const funBtn=$('t-fun-reset-defaults');
+    if(funBtn) funBtn.onclick=function(){
+      const d=Object.assign({}, FUN_DEFAULTS, {tabTitle:'Tetris', faviconUrl:'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4'});
+      saveFunCustom(d);
+    };
+    const colorBtn=$('t-color-reset-defaults');
+    if(colorBtn) colorBtn.onclick=function(){
+      try{
+        localStorage.removeItem('tetrisColorCustomization');
+        localStorage.removeItem('tetrisTetrominoColors');
+        localStorage.removeItem('tetrisCustomCycle');
+        location.reload();
+      }catch(e){}
+    };
+  },0);
+</script>
 
   <!-- ===== Override / patch game's handleKeyDown so it respects chat focus ===== -->
 
