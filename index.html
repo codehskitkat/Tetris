@@ -760,6 +760,12 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       <button type="button" class="t-settings-back-btn" id="t-keybinds-back">← Back</button>
       <div class="t-page-title">Key Bindings</div>
       <div class="t-settings-list" id="t-keybinds-list"></div>
+      <div class="t-color-custom-row">
+        <div class="t-color-custom-label">Background Music</div>
+        <div class="t-setting-control"><input type="range" id="t-music-volume" min="0" max="1" step="0.01" value="0.6" /></div>
+        <div class="hex" id="t-music-volume-hex">60%</div>
+      </div>
+
     </div>
 
     <!-- TETROMINO COLORS PAGE -->
@@ -879,11 +885,6 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
           <div class="t-color-custom-label">Settings Panel</div>
           <div class="t-setting-control"><input type="color" id="t-settings-panel-color" value="#06080a" /></div>
           <div class="hex" id="t-settings-panel-hex">#06080A</div>
-        </div>
-        <div class="t-color-custom-row">
-          <div class="t-color-custom-label">Music Volume</div>
-          <div class="t-setting-control"><input type="range" id="t-music-volume" min="0" max="1" step="0.01" value="0.6" /></div>
-          <div class="hex" id="t-music-volume-hex">60%</div>
         </div>
         <div class="t-color-custom-row">
           <div class="t-color-custom-label">Tab Title</div>
@@ -1931,30 +1932,51 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     updatePresetButtons();
     syncRgbUi();
   }
-  function saveToSlot(index){
+  function saveToSlot(index, options = {}){
     if (isRgbActive()) {
       window.alert('Cannot save RGB mode as a preset. Switch to a static or custom cycle color mode first.');
       return;
     }
     const list = getCustomPresetList();
-    const name = promptPresetName(list[index] && list[index].name ? list[index].name : `Preset ${index + 1}`);
-    if (!name) return;
-    const mode = window.__tetrominoMode || 'static';
-    if (mode === 'custom') {
-      list[index] = { name, colors: getColors(), mode: 'custom', cycleColors: getCycleColors().slice() };
-    } else {
-      list[index] = { name, colors: getColors(), mode: mode };
+    const existing = list[index] || null;
+    const preserveName = !!options.preserveName;
+    const promptName = options.promptName !== false;
+    let name = existing && existing.name ? existing.name : `Preset ${index + 1}`;
+    if (promptName && !preserveName) {
+      const chosen = promptPresetName(name);
+      if (!chosen) return;
+      name = chosen;
     }
+
+    const currentMode = window.__tetrominoMode || 'static';
+    const mode = preserveName && existing && typeof existing.mode === 'string' ? existing.mode : currentMode;
+    const colors = getColors();
+    const slot = { name, colors, mode };
+    if (mode === 'custom') {
+      slot.cycleColors = getCycleColors().slice();
+    }
+    list[index] = slot;
     saveCustomPresetList(list);
     renderCustomPresets();
+  }
+
+  function updateCustomPresetColors(index){
+    const list = getCustomPresetList();
+    const existing = list[index];
+    if (!existing) return;
+    if (isRgbActive()) {
+      window.alert('Cannot save RGB mode as a preset. Switch to a static or custom cycle color mode first.');
+      return;
+    }
+    saveToSlot(index, { promptName: false, preserveName: true });
   }
 
   function loadCustomPreset(index){
     const list = getCustomPresetList();
     const slot = list[index];
     if (!slot) return;
+
     if (slot.mode === 'custom' && Array.isArray(slot.cycleColors) && slot.cycleColors.length) {
-      // Restore the full custom cycle
       const normalized = normalizeCycleColors(slot.cycleColors);
       try { localStorage.setItem(CYCLE_COLORS_STORAGE_KEY, JSON.stringify(normalized)); } catch (e) {}
       if (typeof window.__setTetrominoCycleColors === 'function') window.__setTetrominoCycleColors(normalized);
@@ -1971,7 +1993,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       persistColors(currentColors, true, { mode: slot.mode || 'static' });
       renderRows();
     }
-    // Jump to the color editor so the loaded preset can be edited immediately.
+
     showView('colors');
     renderRows();
     renderCustomPresets();
@@ -2004,7 +2026,6 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const list = getCustomPresetList();
     customPresetsEl.innerHTML = '';
 
-    // Disable "Save Current" when RGB mode is active
     if (saveBtn) {
       const rgbActive = isRgbActive();
       saveBtn.disabled = rgbActive;
@@ -2037,8 +2058,8 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         const overwrite = document.createElement('button');
         overwrite.type = 'button';
         overwrite.className = 't-mini-btn';
-        overwrite.textContent = 'Update';
-        overwrite.title = 'Overwrite this slot with your current colors';
+        overwrite.textContent = 'Update Colors';
+        overwrite.title = 'Save your edited colors to this preset';
         const rgbActive = isRgbActive();
         overwrite.disabled = rgbActive;
         overwrite.style.opacity = rgbActive ? '0.4' : '';
@@ -2046,11 +2067,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         overwrite.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
-          if (isRgbActive()) {
-            window.alert('Cannot save RGB mode as a preset. Switch to a static or custom cycle color mode first.');
-            return;
-          }
-          saveToSlot(idx);
+          updateCustomPresetColors(idx);
         });
 
         const rename = document.createElement('button');
@@ -2113,7 +2130,6 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
     updateCustomPresetButtons();
   }
-
 
   function getCycleSpeed() {
     const speed = Number(window.__getTetrominoRgbSpeed ? window.__getTetrominoRgbSpeed() : 140);
