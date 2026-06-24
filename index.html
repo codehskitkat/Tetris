@@ -668,6 +668,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 .t-rgb-after-place-row input{width:16px;height:16px;margin:0;accent-color:#fff;}
 .t-setting-control{position:relative;height:34px}
 .t-setting-control input[type="color"]{position:absolute;inset:0;width:100%;height:34px;margin:0;z-index:1}
+    .t-setting-control input[type="range"]{width:100%;height:34px;margin:0;}
 .t-rgb-chip{position:absolute;inset:0;border-radius:8px;background:linear-gradient(90deg,#ff0000,#ff7f00,#ffff00,#00ff00,#0000ff,#8000ff,#ff1493,#ff0000);background-size:300% 100%;animation:tetris-rgb-pan var(--rgb-speed,140ms) linear infinite;opacity:0;pointer-events:none}
 .t-setting-row.rgb-mode .t-setting-control input[type="color"]{opacity:0;pointer-events:none}
 .t-setting-row.rgb-mode .t-rgb-chip{opacity:1}
@@ -878,6 +879,11 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
           <div class="t-color-custom-label">Settings Panel</div>
           <div class="t-setting-control"><input type="color" id="t-settings-panel-color" value="#06080a" /></div>
           <div class="hex" id="t-settings-panel-hex">#06080A</div>
+        </div>
+        <div class="t-color-custom-row">
+          <div class="t-color-custom-label">Music Volume</div>
+          <div class="t-setting-control"><input type="range" id="t-music-volume" min="0" max="1" step="0.01" value="0.6" /></div>
+          <div class="hex" id="t-music-volume-hex">60%</div>
         </div>
         <div class="t-color-custom-row">
           <div class="t-color-custom-label">Tab Title</div>
@@ -1926,6 +1932,10 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     syncRgbUi();
   }
   function saveToSlot(index){
+    if (isRgbActive()) {
+      window.alert('Cannot save RGB mode as a preset. Switch to a static or custom cycle color mode first.');
+      return;
+    }
     const list = getCustomPresetList();
     const name = promptPresetName(list[index] && list[index].name ? list[index].name : `Preset ${index + 1}`);
     if (!name) return;
@@ -1961,6 +1971,9 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       persistColors(currentColors, true, { mode: slot.mode || 'static' });
       renderRows();
     }
+    // Jump to the color editor so the loaded preset can be edited immediately.
+    showView('colors');
+    renderRows();
     renderCustomPresets();
   }
 
@@ -2013,7 +2026,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
       if (slot) {
         const isCycle = slot.mode === 'custom';
-        const desc = isCycle ? 'Custom cycle preset · Click to use' : 'Click to use this preset';
+        const desc = isCycle ? 'Custom cycle preset · Load and edit' : 'Load and edit this preset';
         main.innerHTML = `<div class="t-custom-preset-name">${escPreset(slot.name)}</div><div class="t-custom-preset-desc">${desc}</div>`;
         main.addEventListener('click', (e) => {
           e.preventDefault();
@@ -2065,9 +2078,14 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         actions.appendChild(del);
       } else {
         main.innerHTML = `<div class="t-custom-preset-name">Empty slot ${idx + 1}</div><div class="t-custom-preset-desc">Save the current colors here</div>`;
+        const rgbActive = isRgbActive();
         main.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
+          if (rgbActive) {
+            window.alert('Cannot save RGB mode as a preset. Switch to a static or custom cycle color mode first.');
+            return;
+          }
           saveToSlot(idx);
         });
 
@@ -2075,6 +2093,10 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         save.type = 'button';
         save.className = 't-mini-btn';
         save.textContent = 'Save';
+        save.disabled = rgbActive;
+        save.title = rgbActive ? 'Cannot save RGB mode as a preset' : '';
+        save.style.opacity = rgbActive ? '0.4' : '';
+        save.style.cursor = rgbActive ? 'not-allowed' : '';
         save.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
@@ -2524,11 +2546,21 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         onlinePanelBg:   raw.onlinePanelBg   || FUN_DEFAULTS.onlinePanelBg,
         settingsPanelBg: raw.settingsPanelBg || FUN_DEFAULTS.settingsPanelBg,
         pageBg:          raw.pageBg          || FUN_DEFAULTS.pageBg,
+        musicVolume:     (Number(raw.musicVolume) >= 0 && Number(raw.musicVolume) <= 1) ? Number(raw.musicVolume) : 0.6,
         tabTitle:        raw.tabTitle        || 'Tetris',
         faviconUrl:      raw.faviconUrl      || 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4',
       };
-    } catch (e) { return Object.assign({}, FUN_DEFAULTS, { tabTitle: 'Tetris', faviconUrl: 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4' }); }
+    } catch (e) { return Object.assign({}, FUN_DEFAULTS, { musicVolume: 0.6, tabTitle: 'Tetris', faviconUrl: 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4' }); }
   }
+
+  function getSavedMusicVolume() {
+    try {
+      const fun = getFunCustom();
+      const vol = Number(fun.musicVolume);
+      return Number.isFinite(vol) ? Math.max(0, Math.min(1, vol)) : 0.6;
+    } catch (e) { return 0.6; }
+  }
+  window.__getTetrisMusicVolume = getSavedMusicVolume;
 
   function applyFunCustom(fun) {
     document.documentElement.style.setProperty('--t-dot-on',  fun.dotOn);
@@ -2548,6 +2580,9 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const faviconUrl = typeof fun.faviconUrl === 'string' && fun.faviconUrl.trim()
       ? fun.faviconUrl.trim()
       : 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4';
+    const musicVol = getSavedMusicVolume();
+    if (window.menuSong) window.menuSong.volume = musicVol;
+    if (window.duelSong) window.duelSong.volume = musicVol;
     let link = document.querySelector('link[rel="icon"]');
     if (!link) {
       link = document.createElement('link');
@@ -2579,6 +2614,10 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       if (input) input.value = fun[prop];
       if (hexEl) hexEl.textContent = fun[prop].toUpperCase();
     });
+    const musicInput = $('t-music-volume');
+    const musicHex = $('t-music-volume-hex');
+    if (musicInput) musicInput.value = String(Math.max(0, Math.min(1, Number(fun.musicVolume) || 0.6)));
+    if (musicHex) musicHex.textContent = `${Math.round((Math.max(0, Math.min(1, Number(fun.musicVolume) || 0.6)) * 100))}%`;
     const tabInput = $('t-tab-title');
     const favInput = $('t-favicon-url');
     if (tabInput) tabInput.value = fun.tabTitle || 'Tetris';
@@ -2631,6 +2670,22 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       };
       favInput.addEventListener('input', onFavChange);
       favInput.addEventListener('change', onFavChange);
+    }
+
+    const musicInput = $('t-music-volume');
+    const musicHex = $('t-music-volume-hex');
+    if (musicInput) {
+      musicInput.addEventListener('pointerdown', e => e.stopPropagation());
+      musicInput.addEventListener('click', e => e.stopPropagation());
+      const onMusicChange = () => {
+        const fun = getFunCustom();
+        const vol = Math.max(0, Math.min(1, Number(musicInput.value) || 0));
+        fun.musicVolume = vol;
+        if (musicHex) musicHex.textContent = `${Math.round(vol * 100)}%`;
+        saveFunCustom(fun);
+      };
+      musicInput.addEventListener('input', onMusicChange);
+      musicInput.addEventListener('change', onMusicChange);
     }
     applyFunCustom(getFunCustom());
   }
