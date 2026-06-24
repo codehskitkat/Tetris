@@ -1669,7 +1669,9 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         if (!slot || typeof slot !== 'object') return null;
         const name = typeof slot.name === 'string' && slot.name.trim() ? slot.name.trim() : 'Untitled preset';
         const colors = safeColors(slot.colors);
-        return { name, colors };
+        const mode = typeof slot.mode === 'string' ? slot.mode : 'static';
+        const cycleColors = Array.isArray(slot.cycleColors) && slot.cycleColors.length ? slot.cycleColors : null;
+        return { name, colors, mode, ...(cycleColors ? { cycleColors } : {}) };
       });
     } catch (e) {
       return Array.from({ length: MAX_CUSTOM_PRESETS }, () => null);
@@ -1684,8 +1686,14 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
   function activeCustomPresetIndex(colors){
     const list = getCustomPresetList();
+    const mode = window.__tetrominoMode || 'static';
+    if (mode === 'custom') {
+      // Match by cycleColors
+      const activeCycleColors = JSON.stringify(normalizeCycleColors(getCycleColors()));
+      return list.findIndex(slot => slot && slot.mode === 'custom' && slot.cycleColors && JSON.stringify(normalizeCycleColors(slot.cycleColors)) === activeCycleColors);
+    }
     const target = JSON.stringify(safeColors(colors));
-    return list.findIndex(slot => slot && JSON.stringify(safeColors(slot.colors)) === target);
+    return list.findIndex(slot => slot && slot.mode !== 'custom' && JSON.stringify(safeColors(slot.colors)) === target);
   }
 
   function promptPresetName(defaultName){
@@ -1921,7 +1929,12 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const list = getCustomPresetList();
     const name = promptPresetName(list[index] && list[index].name ? list[index].name : `Preset ${index + 1}`);
     if (!name) return;
-    list[index] = { name, colors: getColors() };
+    const mode = window.__tetrominoMode || 'static';
+    if (mode === 'custom') {
+      list[index] = { name, colors: getColors(), mode: 'custom', cycleColors: getCycleColors().slice() };
+    } else {
+      list[index] = { name, colors: getColors(), mode: mode };
+    }
     saveCustomPresetList(list);
     renderCustomPresets();
   }
@@ -1930,9 +1943,24 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const list = getCustomPresetList();
     const slot = list[index];
     if (!slot) return;
-    currentColors = safeColors(slot.colors);
-    persistColors(currentColors, true, { mode: 'static' });
-    renderRows();
+    if (slot.mode === 'custom' && Array.isArray(slot.cycleColors) && slot.cycleColors.length) {
+      // Restore the full custom cycle
+      const normalized = normalizeCycleColors(slot.cycleColors);
+      try { localStorage.setItem(CYCLE_COLORS_STORAGE_KEY, JSON.stringify(normalized)); } catch (e) {}
+      if (typeof window.__setTetrominoCycleColors === 'function') window.__setTetrominoCycleColors(normalized);
+      setCycleMode('custom');
+      saveCycleColors(normalized, true);
+      currentColors = safeColors(slot.colors);
+      updatePresetButtons();
+      updateCustomPresetButtons();
+      renderRows();
+      renderCycleCustom();
+      updateCycleEditorVisibility();
+    } else {
+      currentColors = safeColors(slot.colors);
+      persistColors(currentColors, true, { mode: slot.mode || 'static' });
+      renderRows();
+    }
     renderCustomPresets();
   }
 
@@ -1963,6 +1991,15 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const list = getCustomPresetList();
     customPresetsEl.innerHTML = '';
 
+    // Disable "Save Current" when RGB mode is active
+    if (saveBtn) {
+      const rgbActive = isRgbActive();
+      saveBtn.disabled = rgbActive;
+      saveBtn.title = rgbActive ? 'Cannot save RGB mode as a preset' : '';
+      saveBtn.style.opacity = rgbActive ? '0.4' : '';
+      saveBtn.style.cursor = rgbActive ? 'not-allowed' : '';
+    }
+
     list.forEach((slot, idx) => {
       const card = document.createElement('div');
       card.className = 't-custom-preset';
@@ -1975,11 +2012,32 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       actions.className = 't-custom-preset-actions';
 
       if (slot) {
-        main.innerHTML = `<div class="t-custom-preset-name">${escPreset(slot.name)}</div><div class="t-custom-preset-desc">Click to use this preset</div>`;
+        const isCycle = slot.mode === 'custom';
+        const desc = isCycle ? 'Custom cycle preset · Click to use' : 'Click to use this preset';
+        main.innerHTML = `<div class="t-custom-preset-name">${escPreset(slot.name)}</div><div class="t-custom-preset-desc">${desc}</div>`;
         main.addEventListener('click', (e) => {
           e.preventDefault();
           e.stopPropagation();
           loadCustomPreset(idx);
+        });
+
+        const overwrite = document.createElement('button');
+        overwrite.type = 'button';
+        overwrite.className = 't-mini-btn';
+        overwrite.textContent = 'Update';
+        overwrite.title = 'Overwrite this slot with your current colors';
+        const rgbActive = isRgbActive();
+        overwrite.disabled = rgbActive;
+        overwrite.style.opacity = rgbActive ? '0.4' : '';
+        overwrite.style.cursor = rgbActive ? 'not-allowed' : '';
+        overwrite.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          if (isRgbActive()) {
+            window.alert('Cannot save RGB mode as a preset. Switch to a static or custom cycle color mode first.');
+            return;
+          }
+          saveToSlot(idx);
         });
 
         const rename = document.createElement('button');
@@ -2002,6 +2060,7 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
           deleteCustomPreset(idx);
         });
 
+        actions.appendChild(overwrite);
         actions.appendChild(rename);
         actions.appendChild(del);
       } else {
@@ -2644,6 +2703,10 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     saveBtn.addEventListener('click', (e) => {
       e.preventDefault();
       e.stopPropagation();
+      if (isRgbActive()) {
+        window.alert('RGB mode cannot be saved as a preset. Switch to a static or custom cycle color mode first.');
+        return;
+      }
       const list = getCustomPresetList();
       const emptyIndex = list.findIndex(slot => !slot);
       if (emptyIndex === -1) {
