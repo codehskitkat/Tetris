@@ -765,6 +765,11 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         <div class="t-setting-control"><input type="range" id="t-music-volume" min="0" max="1" step="0.01" value="0.6" /></div>
         <div class="hex" id="t-music-volume-hex">60%</div>
       </div>
+      <div class="t-color-custom-row">
+        <div class="t-color-custom-label">SFX Volume</div>
+        <div class="t-setting-control"><input type="range" id="t-sfx-volume" min="0" max="1" step="0.01" value="0.6" /></div>
+        <div class="hex" id="t-sfx-volume-hex">60%</div>
+      </div>
 
     </div>
 
@@ -827,6 +832,27 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         <button type="button" class="t-settings-save" id="t-settings-save">Save Current</button>
       </div>
       <div class="t-custom-presets" id="t-custom-presets"></div>
+
+      <div class="t-preset-editor" id="t-preset-editor" style="display:none; flex-direction:column; gap:10px; margin-top:10px;">
+        <div class="t-page-title" id="t-preset-editor-title">Edit Preset</div>
+        <div class="t-settings-list" id="t-preset-editor-list"></div>
+
+        <div class="t-cycle-editor" id="t-preset-editor-cycle" style="display:none; flex-direction:column; gap:10px;">
+          <div class="t-cycle-section">
+            <div class="t-cycle-section-title">Cycle Colors</div>
+            <div class="t-cycle-toolbar" style="margin-bottom:2px;">
+              <button type="button" class="t-mini-btn" id="t-preset-cycle-add-color">Add Color</button>
+              <button type="button" class="t-mini-btn" id="t-preset-cycle-reset-colors">Reset</button>
+            </div>
+            <div class="t-cycle-list" id="t-preset-cycle-list"></div>
+          </div>
+        </div>
+
+        <div class="t-settings-topbar">
+          <button type="button" class="t-settings-back" id="t-preset-editor-back">Back</button>
+          <button type="button" class="t-settings-save" id="t-preset-editor-save">Update Colors</button>
+        </div>
+      </div>
     </div>
     <!-- COLOR CUSTOMIZATION PAGE -->
     <div class="t-settings-page" id="t-settings-page-color-custom" style="display:none;">
@@ -1562,6 +1588,15 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
   const presetsEl      = $('t-settings-presets');
   const listEl         = $('t-settings-list');
   const customPresetsEl = $('t-custom-presets');
+  const presetEditorEl = $('t-preset-editor');
+  const presetEditorTitle = $('t-preset-editor-title');
+  const presetEditorList = $('t-preset-editor-list');
+  const presetEditorCycle = $('t-preset-editor-cycle');
+  const presetEditorCycleList = $('t-preset-cycle-list');
+  const presetEditorSave = $('t-preset-editor-save');
+  const presetEditorBack = $('t-preset-editor-back');
+  const presetCycleAddBtn = $('t-preset-cycle-add-color');
+  const presetCycleResetBtn = $('t-preset-cycle-reset-colors');
   const hideBtn        = $('t-settings-hide');
   const rgbControl     = $('t-rgb-control');
   const rgbSlider      = $('t-rgb-speed');
@@ -1572,6 +1607,8 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
 
   let currentColors = null;
   let view = 'home';
+  let editingPresetIndex = -1;
+  let editingPresetDraft = null;
 
   function safeColors(input){
     const fallback = Array.isArray(window.__tetrominoDefaultColors)
@@ -1785,9 +1822,10 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     const subtitles = { home:'Customization', keybinds:'Settings', colors:'Tetromino Colors', presets:'Presets', 'color-custom':'Color Customization', 'fun-custom':'Fun Customization' };
     if (subtitleEl) subtitleEl.textContent = subtitles[which] || '';
 
-    if (which === 'colors') { renderRows(); renderBuiltinPresets(); updateCycleEditorVisibility(); }
-    else if (which === 'presets') renderCustomPresets();
-    else if (which === 'keybinds') renderKeybinds();
+    if (which === 'colors') { closePresetEditor(); renderRows(); renderBuiltinPresets(); updateCycleEditorVisibility(); }
+    else if (which === 'presets') { renderCustomPresets(); if (editingPresetIndex >= 0 && editingPresetDraft && presetEditorEl) presetEditorEl.style.display = 'flex'; }
+    else { closePresetEditor(); }
+    if (which === 'keybinds') renderKeybinds();
     else if (which === 'color-custom') renderColorCustom();
     else if (which === 'fun-custom') renderFunCustom();
   }
@@ -1960,15 +1998,164 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     renderCustomPresets();
   }
 
-  function updateCustomPresetColors(index){
+  function renderPresetEditorStatic(colors) {
+    if (!presetEditorList) return;
+    presetEditorList.innerHTML = '';
+    const safe = safeColors(colors);
+    safe.forEach((color, idx) => {
+      const row = document.createElement('div');
+      row.className = 't-setting-row';
+
+      const label = document.createElement('div');
+      label.className = 'piece';
+      label.textContent = PIECES[idx];
+
+      const control = document.createElement('div');
+      control.className = 't-setting-control';
+
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.value = color;
+
+      const hex = document.createElement('div');
+      hex.className = 'hex';
+      hex.textContent = String(color || '').toUpperCase();
+
+      input.addEventListener('pointerdown', e => e.stopPropagation());
+      input.addEventListener('click', e => e.stopPropagation());
+      input.addEventListener('input', () => {
+        if (!editingPresetDraft) return;
+        editingPresetDraft.colors[idx] = input.value;
+        hex.textContent = input.value.toUpperCase();
+      });
+      input.addEventListener('change', () => {
+        if (!editingPresetDraft) return;
+        editingPresetDraft.colors[idx] = input.value;
+        hex.textContent = input.value.toUpperCase();
+      });
+
+      control.appendChild(input);
+      row.appendChild(label);
+      row.appendChild(control);
+      row.appendChild(hex);
+      presetEditorList.appendChild(row);
+    });
+  }
+
+  function renderPresetEditorCycle(colors) {
+    if (!presetEditorCycleList) return;
+    presetEditorCycleList.innerHTML = '';
+    const safe = normalizeCycleColors(colors);
+    safe.forEach((color, idx) => {
+      const row = document.createElement('div');
+      row.className = 't-cycle-row';
+
+      const label = document.createElement('div');
+      label.className = 't-color-custom-label';
+      label.textContent = `Color ${idx + 1}`;
+
+      const control = document.createElement('div');
+      control.className = 't-setting-control';
+
+      const input = document.createElement('input');
+      input.type = 'color';
+      input.value = color;
+
+      const hex = document.createElement('div');
+      hex.className = 'hex';
+      hex.textContent = String(color || '').toUpperCase();
+
+      const remove = document.createElement('button');
+      remove.type = 'button';
+      remove.className = 't-cycle-remove';
+      remove.textContent = 'Remove';
+      remove.disabled = safe.length <= 1;
+      remove.title = safe.length <= 1 ? 'At least one color is required' : 'Remove this color';
+
+      input.addEventListener('pointerdown', e => e.stopPropagation());
+      input.addEventListener('click', e => e.stopPropagation());
+      input.addEventListener('input', () => {
+        if (!editingPresetDraft) return;
+        editingPresetDraft.cycleColors[idx] = input.value;
+        hex.textContent = input.value.toUpperCase();
+      });
+      input.addEventListener('change', () => {
+        if (!editingPresetDraft) return;
+        editingPresetDraft.cycleColors[idx] = input.value;
+        hex.textContent = input.value.toUpperCase();
+      });
+      remove.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!editingPresetDraft || editingPresetDraft.cycleColors.length <= 1) return;
+        editingPresetDraft.cycleColors.splice(idx, 1);
+        renderPresetEditorCycle(editingPresetDraft.cycleColors);
+      });
+
+      control.appendChild(input);
+      row.appendChild(label);
+      row.appendChild(control);
+      row.appendChild(hex);
+      row.appendChild(remove);
+      presetEditorCycleList.appendChild(row);
+    });
+  }
+
+  function openPresetEditor(index){
     const list = getCustomPresetList();
-    const existing = list[index];
-    if (!existing) return;
+    const slot = list[index];
+    if (!slot) return;
+    editingPresetIndex = index;
+    editingPresetDraft = {
+      name: slot.name || `Preset ${index + 1}`,
+      mode: slot.mode === 'custom' ? 'custom' : 'static',
+      colors: safeColors(slot.colors),
+      cycleColors: slot.mode === 'custom' ? normalizeCycleColors(slot.cycleColors && slot.cycleColors.length ? slot.cycleColors : getCycleColors()) : []
+    };
+
+    if (presetEditorEl) presetEditorEl.style.display = 'flex';
+    if (presetEditorTitle) presetEditorTitle.textContent = `Edit ${editingPresetDraft.name}`;
+    if (presetEditorCycle) presetEditorCycle.style.display = editingPresetDraft.mode === 'custom' ? 'flex' : 'none';
+    renderPresetEditorStatic(editingPresetDraft.colors);
+    if (editingPresetDraft.mode === 'custom') {
+      renderPresetEditorCycle(editingPresetDraft.cycleColors);
+    }
+    if (view === 'presets') renderCustomPresets();
+  }
+
+  function closePresetEditor(){
+    editingPresetIndex = -1;
+    editingPresetDraft = null;
+    if (presetEditorEl) presetEditorEl.style.display = 'none';
+    if (presetEditorList) presetEditorList.innerHTML = '';
+    if (presetEditorCycleList) presetEditorCycleList.innerHTML = '';
+  }
+
+  function commitPresetEditor(){
+    const list = getCustomPresetList();
+    const slot = list[editingPresetIndex];
+    if (!slot || !editingPresetDraft) return;
     if (isRgbActive()) {
       window.alert('Cannot save RGB mode as a preset. Switch to a static or custom cycle color mode first.');
       return;
     }
-    saveToSlot(index, { promptName: false, preserveName: true });
+    const next = {
+      name: slot.name || editingPresetDraft.name || `Preset ${editingPresetIndex + 1}`,
+      mode: editingPresetDraft.mode === 'custom' ? 'custom' : 'static',
+      colors: safeColors(editingPresetDraft.colors),
+      ...(editingPresetDraft.mode === 'custom' ? { cycleColors: normalizeCycleColors(editingPresetDraft.cycleColors) } : {})
+    };
+    list[editingPresetIndex] = next;
+    saveCustomPresetList(list);
+    closePresetEditor();
+    renderCustomPresets();
+    if (view === 'colors') {
+      showView('colors');
+    }
+  }
+
+  function updateCustomPresetColors(index){
+    openPresetEditor(index);
   }
 
   function loadCustomPreset(index){
@@ -2563,10 +2750,11 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
         settingsPanelBg: raw.settingsPanelBg || FUN_DEFAULTS.settingsPanelBg,
         pageBg:          raw.pageBg          || FUN_DEFAULTS.pageBg,
         musicVolume:     (Number(raw.musicVolume) >= 0 && Number(raw.musicVolume) <= 1) ? Number(raw.musicVolume) : 0.6,
+        sfxVolume:       (Number(raw.sfxVolume) >= 0 && Number(raw.sfxVolume) <= 1) ? Number(raw.sfxVolume) : 0.6,
         tabTitle:        raw.tabTitle        || 'Tetris',
         faviconUrl:      raw.faviconUrl      || 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4',
       };
-    } catch (e) { return Object.assign({}, FUN_DEFAULTS, { musicVolume: 0.6, tabTitle: 'Tetris', faviconUrl: 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4' }); }
+    } catch (e) { return Object.assign({}, FUN_DEFAULTS, { musicVolume: 0.6, sfxVolume: 0.6, tabTitle: 'Tetris', faviconUrl: 'https://codehs.com/uploads/3a32d33161cd615131d133a204407fb4' }); }
   }
 
   function getSavedMusicVolume() {
@@ -2577,6 +2765,13 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
     } catch (e) { return 0.6; }
   }
   window.__getTetrisMusicVolume = getSavedMusicVolume;
+  window.__getTetrisSfxVolume = function() {
+    try {
+      const fun = getFunCustom();
+      const vol = Number(fun.sfxVolume);
+      return Number.isFinite(vol) ? Math.max(0, Math.min(1, vol)) : 0.6;
+    } catch (e) { return 0.6; }
+  };
 
   function applyFunCustom(fun) {
     document.documentElement.style.setProperty('--t-dot-on',  fun.dotOn);
@@ -2703,6 +2898,58 @@ window.$ = window.$ || function(id){ return document.getElementById(id); };
       musicInput.addEventListener('input', onMusicChange);
       musicInput.addEventListener('change', onMusicChange);
     }
+
+    const sfxInput = $('t-sfx-volume');
+    const sfxHex = $('t-sfx-volume-hex');
+    if (sfxInput) {
+      sfxInput.addEventListener('pointerdown', e => e.stopPropagation());
+      sfxInput.addEventListener('click', e => e.stopPropagation());
+      const onSfxChange = () => {
+        const fun = getFunCustom();
+        const vol = Math.max(0, Math.min(1, Number(sfxInput.value) || 0));
+        fun.sfxVolume = vol;
+        if (sfxHex) sfxHex.textContent = `${Math.round(vol * 100)}%`;
+        saveFunCustom(fun);
+      };
+      sfxInput.addEventListener('input', onSfxChange);
+      sfxInput.addEventListener('change', onSfxChange);
+    }
+
+    if (presetEditorSave) {
+      presetEditorSave.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        commitPresetEditor();
+      });
+    }
+    if (presetEditorBack) {
+      presetEditorBack.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        closePresetEditor();
+      });
+    }
+    if (presetCycleAddBtn) {
+      presetCycleAddBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!editingPresetDraft) return;
+        editingPresetDraft.cycleColors.push('#ffffff');
+        renderPresetEditorCycle(editingPresetDraft.cycleColors);
+      });
+    }
+    if (presetCycleResetBtn) {
+      presetCycleResetBtn.addEventListener('click', (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (!editingPresetDraft) return;
+        const list = getCustomPresetList();
+        const slot = list[editingPresetIndex];
+        editingPresetDraft.cycleColors = normalizeCycleColors((slot && Array.isArray(slot.cycleColors) && slot.cycleColors.length) ? slot.cycleColors : getCycleColors());
+        renderPresetEditorCycle(editingPresetDraft.cycleColors);
+      });
+    }
+
     applyFunCustom(getFunCustom());
   }
 
